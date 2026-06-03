@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="FlotaManagement" default="run" basedir=".">
+    <description>Sistema de venta de pasajes Copetran</description>
+
+    <property name="src.dir"     value="src"/>
+    <property name="build.dir"   value="build"/>
+    <property name="classes.dir" value="${build.dir}/classes"/>
+    <property name="dist.dir"    value="dist"/>
+    <property name="dist.jar"    value="${dist.dir}/FlotaManagement.jar"/>
+    <property name="main.class"  value="Main"/>
+
+    <path id="classpath">
+        <pathelement path="${classes.dir}"/>
+    </path>
+
+    <target name="clean" description="Limpiar compilados">
+        <delete dir="${build.dir}"/>
+        <delete dir="${dist.dir}"/>
+    </target>
+
+    <target name="init" description="Crear directorios">
+        <mkdir dir="${classes.dir}"/>
+        <mkdir dir="${dist.dir}"/>
+    </target>
+
+    <target name="compile" depends="init" description="Compilar fuentes">
+        <javac srcdir="${src.dir}" destdir="${classes.dir}"
+               source="17" target="17"
+               includeantruntime="false"
+               encoding="UTF-8">
+            <classpath refid="classpath"/>
+        </javac>
+    </target>
+
+    <target name="jar" depends="compile" description="Empaquetar JAR">
+        <jar destfile="${dist.jar}" basedir="${classes.dir}">
+            <manifest>
+                <attribute name="Main-Class" value="${main.class}"/>
+            </manifest>
+        </jar>
+    </target>
+
+    <target name="run" depends="compile" description="Ejecutar aplicacion">
+        <java classname="${main.class}" fork="true">
+            <classpath refid="classpath"/>
+        </java>
+    </target>
+
+    <target name="run-single" depends="compile" description="Ejecutar clase especifica">
+        <java classname="${run.class}" fork="true">
+            <classpath refid="classpath"/>
+        </java>
+    </target>
+
+    <target name="debug" depends="compile" description="Depurar aplicacion">
+        <java classname="${main.class}" fork="true">
+            <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=n,address=${jpda.address}"/>
+            <classpath refid="classpath"/>
+        </java>
+    </target>
+
+    <target name="debug-single" depends="compile" description="Depurar clase especifica">
+        <java classname="${debug.class}" fork="true">
+            <jvmarg value="-agentlib:jdwp=transport=dt_socket,server=n,address=${jpda.address}"/>
+            <classpath refid="classpath"/>
+        </java>
+    </target>
+
+    <target name="rebuild" depends="clean,compile" description="Recompilar desde cero"/>
+</project>
