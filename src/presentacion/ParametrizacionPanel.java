@@ -5,7 +5,6 @@ import javax.swing.*;
 import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.text.DecimalFormat;
 import java.text.NumberFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -14,8 +13,12 @@ import java.util.List;
 public class ParametrizacionPanel extends JPanel {
 
     private final EmpresaTransporte empresa;
-
     private String editingRutaCodigo;
+    private String editingConductorCedula;
+
+    // Referencias para refrescar combos de Salidas desde Rutas/Buses
+    private JComboBox<String> rutaComboSalidas;
+    private JComboBox<String> busComboSalidas;
 
     public ParametrizacionPanel(EmpresaTransporte empresa) {
         this.empresa = empresa;
@@ -28,8 +31,29 @@ public class ParametrizacionPanel extends JPanel {
         tabs.addTab("Rutas", crearPanelRutas());
         tabs.addTab("Buses", crearPanelBuses());
         tabs.addTab("Salidas", crearPanelSalidas());
+        tabs.addTab("Conductores", crearPanelConductores());
+
+        tabs.addChangeListener(e -> {
+            if (tabs.getSelectedIndex() == 2) { // pestaña Salidas
+                refrescarCombosSalidas();
+            }
+        });
 
         add(tabs, BorderLayout.CENTER);
+    }
+
+    private void refrescarCombosSalidas() {
+        if (rutaComboSalidas == null || busComboSalidas == null) return;
+        rutaComboSalidas.removeAllItems();
+        for (Ruta r : empresa.listarRutas()) {
+            rutaComboSalidas.addItem(r.getCodigo() + " — " + r.getOrigen() + " \u2192 " + r.getDestino());
+        }
+        busComboSalidas.removeAllItems();
+        for (Bus b : empresa.listarBuses()) {
+            if (Bus.DISPONIBLE.equals(b.getEstado())) {
+                busComboSalidas.addItem(b.getPlaca() + " (Cap: " + b.getCapacidad() + ")");
+            }
+        }
     }
 
     // ============================================================
@@ -50,22 +74,29 @@ public class ParametrizacionPanel extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(4, 4, 4, 4);
 
-        JTextField origenField = new JTextField(10);
+        JLabel codigoLabel = new JLabel("(Auto)");
+        JTextField origenField = new JTextField("C\u00facuta");
+        origenField.setEditable(false);
         JTextField destinoField = new JTextField(10);
         JFormattedTextField tarifaField = new JFormattedTextField(NumberFormat.getNumberInstance());
         tarifaField.setColumns(10);
 
         gbc.gridx = 0; gbc.gridy = 0;
+        form.add(new JLabel("C\u00f3digo:"), gbc);
+        gbc.gridx = 1;
+        form.add(codigoLabel, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
         form.add(new JLabel("Origen:"), gbc);
         gbc.gridx = 1;
         form.add(origenField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 1;
+        gbc.gridx = 0; gbc.gridy = 2;
         form.add(new JLabel("Destino:"), gbc);
         gbc.gridx = 1;
         form.add(destinoField, gbc);
 
-        gbc.gridx = 0; gbc.gridy = 2;
+        gbc.gridx = 0; gbc.gridy = 3;
         form.add(new JLabel("Tarifa:"), gbc);
         gbc.gridx = 1;
         form.add(tarifaField, gbc);
@@ -88,7 +119,6 @@ public class ParametrizacionPanel extends JPanel {
         };
 
         guardarBtn.addActionListener(e -> {
-            String orig = origenField.getText().trim();
             String dest = destinoField.getText().trim();
             float tarifa;
             try {
@@ -97,22 +127,26 @@ public class ParametrizacionPanel extends JPanel {
                 JOptionPane.showMessageDialog(this, "Tarifa inv\u00e1lida");
                 return;
             }
-            if (orig.isEmpty() || dest.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Todos los campos son obligatorios");
+            if (dest.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Destino es obligatorio");
                 return;
             }
             if (editingRutaCodigo != null) {
-                empresa.editarRuta(editingRutaCodigo, orig, dest, tarifa);
+                empresa.editarRuta(editingRutaCodigo, "C\u00facuta", dest, tarifa);
                 editingRutaCodigo = null;
+                codigoLabel.setText("(Auto)");
             } else {
-                empresa.crearRuta("", orig, dest, tarifa);
+                // Código autogenerado
+                empresa.crearRuta(null, "C\u00facuta", dest, tarifa);
             }
             actualizarTablaRutas(model);
-            limpiarCampos(origenField, destinoField, tarifaField);
+            limpiarCampos(destinoField, tarifaField);
+            refrescarCombosSalidas();
         });
 
         limpiarBtn.addActionListener(e -> {
-            limpiarCampos(origenField, destinoField, tarifaField);
+            limpiarCampos(destinoField, tarifaField);
+            codigoLabel.setText("(Auto)");
             editingRutaCodigo = null;
         });
 
@@ -132,10 +166,10 @@ public class ParametrizacionPanel extends JPanel {
             int row = table.getSelectedRow();
             if (row >= 0) {
                 editingRutaCodigo = model.getValueAt(row, 0).toString();
+                codigoLabel.setText(editingRutaCodigo);
                 String rutaStr = model.getValueAt(row, 1).toString();
                 String[] parts = rutaStr.split(" \u2192 ");
                 if (parts.length == 2) {
-                    origenField.setText(parts[0]);
                     destinoField.setText(parts[1]);
                 }
                 tarifaField.setText(model.getValueAt(row, 2).toString().replaceAll("[^0-9]", ""));
@@ -165,6 +199,10 @@ public class ParametrizacionPanel extends JPanel {
     // TAB BUSES
     // ============================================================
 
+    private int getCapacidadPorTipo(String tipo) {
+        return "EJECUTIVO".equalsIgnoreCase(tipo) ? 40 : 30;
+    }
+
     private JPanel crearPanelBuses() {
         JPanel panel = new JPanel(new BorderLayout(10, 0));
         panel.setBackground(Colores.FONDO_GENERAL);
@@ -181,6 +219,14 @@ public class ParametrizacionPanel extends JPanel {
 
         JTextField placaField = new JTextField(10);
         JComboBox<String> tipoCombo = new JComboBox<>(new String[]{"NORMAL", "EJECUTIVO"});
+        JLabel capLabel = new JLabel("30 (Normal)");
+        capLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
+        capLabel.setForeground(Colores.TEXTO_SECUNDARIO);
+
+        tipoCombo.addActionListener(e -> {
+            String tipo = (String) tipoCombo.getSelectedItem();
+            capLabel.setText(getCapacidadPorTipo(tipo) + " (" + (tipo.equals("EJECUTIVO") ? "Ejecutivo" : "Normal") + ")");
+        });
 
         gbc.gridx = 0; gbc.gridy = 0;
         form.add(new JLabel("Placa:"), gbc);
@@ -193,14 +239,15 @@ public class ParametrizacionPanel extends JPanel {
         form.add(tipoCombo, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2;
-        JLabel capFijaLabel = new JLabel("Capacidad: " + getCapacidadPorTipo((String) tipoCombo.getSelectedItem()));
-        capFijaLabel.setFont(new Font("SansSerif", Font.ITALIC, 11));
-        capFijaLabel.setForeground(Colores.TEXTO_SECUNDARIO);
-        form.add(capFijaLabel, gbc);
+        form.add(new JLabel("Capacidad:"), gbc);
+        gbc.gridx = 1;
+        form.add(capLabel, gbc);
 
-        tipoCombo.addActionListener(e ->
-            capFijaLabel.setText("Capacidad: " + getCapacidadPorTipo((String) tipoCombo.getSelectedItem()))
-        );
+        JLabel infoEstado = new JLabel("Estado inicial: DISPONIBLE");
+        infoEstado.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        infoEstado.setForeground(Colores.ESTADO_VERDE_TX);
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2;
+        form.add(infoEstado, gbc);
 
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         btnPanel.setOpaque(false);
@@ -211,24 +258,25 @@ public class ParametrizacionPanel extends JPanel {
         btnPanel.add(limpiarBtn);
         btnPanel.add(guardarBtn);
 
-        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2;
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2;
         form.add(btnPanel, gbc);
 
         JPanel listaPanel = new JPanel();
+        listaPanel.setLayout(new BoxLayout(listaPanel, BoxLayout.Y_AXIS));
+        listaPanel.setBackground(Colores.FONDO_GENERAL);
 
         guardarBtn.addActionListener(e -> {
             String placa = placaField.getText().trim().toUpperCase();
             if (placa.isEmpty()) { JOptionPane.showMessageDialog(this, "Placa obligatoria"); return; }
             String tipo = (String) tipoCombo.getSelectedItem();
-            empresa.crearBus(placa, Bus.DISPONIBLE, tipo);
+            int capacidad = getCapacidadPorTipo(tipo);
+            empresa.crearBus(placa, Bus.DISPONIBLE, tipo, capacidad);
             actualizarListaBuses(listaPanel);
             limpiarCampos(placaField);
+            refrescarCombosSalidas();
         });
 
         limpiarBtn.addActionListener(e -> limpiarCampos(placaField));
-        listaPanel.setLayout(new BoxLayout(listaPanel, BoxLayout.Y_AXIS));
-        listaPanel.setBackground(Colores.FONDO_GENERAL);
-
         actualizarListaBuses(listaPanel);
 
         JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, new JScrollPane(listaPanel));
@@ -266,30 +314,46 @@ public class ParametrizacionPanel extends JPanel {
             info.add(placaLabel);
             info.add(detalle);
 
-            JLabel badge = new JLabel(b.getEstado());
-            badge.setFont(new Font("SansSerif", Font.BOLD, 11));
-            badge.setOpaque(true);
-            badge.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-            if (Bus.DISPONIBLE.equals(b.getEstado())) {
-                badge.setBackground(Colores.ESTADO_VERDE);
-                badge.setForeground(Colores.ESTADO_VERDE_TX);
-            } else if (Bus.MANTENIMIENTO.equals(b.getEstado())) {
-                badge.setBackground(Colores.ESTADO_AMBAR);
-                badge.setForeground(Colores.ESTADO_AMBAR_TX);
-            } else {
-                badge.setBackground(Colores.FONDO_SUPERFICIE);
-                badge.setForeground(Colores.TEXTO_SECUNDARIO);
-            }
+            // Badge de estado ahora es un JComboBox editable
+            JComboBox<String> estadoCombo = new JComboBox<>(new String[]{Bus.DISPONIBLE, Bus.EN_RUTA, Bus.MANTENIMIENTO});
+            estadoCombo.setSelectedItem(b.getEstado());
+            estadoCombo.setFont(new Font("SansSerif", Font.PLAIN, 11));
+            estadoCombo.setMaximumSize(new Dimension(140, 28));
+            // Color de fondo según estado
+            actualizarColorEstadoCombo(estadoCombo);
+            estadoCombo.addActionListener(ev -> {
+                String nuevoEstado = (String) estadoCombo.getSelectedItem();
+                empresa.editarBus(b.getPlaca(), nuevoEstado);
+                actualizarColorEstadoCombo(estadoCombo);
+                refrescarCombosSalidas();
+            });
 
             card.add(icono, BorderLayout.WEST);
             card.add(info, BorderLayout.CENTER);
-            card.add(badge, BorderLayout.EAST);
+            JPanel eastWrapper = new JPanel(new BorderLayout());
+            eastWrapper.setOpaque(false);
+            eastWrapper.add(estadoCombo, BorderLayout.CENTER);
+            card.add(eastWrapper, BorderLayout.EAST);
 
             listaPanel.add(card);
             listaPanel.add(Box.createVerticalStrut(5));
         }
         listaPanel.revalidate();
         listaPanel.repaint();
+    }
+
+    private void actualizarColorEstadoCombo(JComboBox<String> combo) {
+        String estado = (String) combo.getSelectedItem();
+        if (Bus.DISPONIBLE.equals(estado)) {
+            combo.setBackground(Colores.ESTADO_VERDE);
+            combo.setForeground(Colores.ESTADO_VERDE_TX);
+        } else if (Bus.MANTENIMIENTO.equals(estado)) {
+            combo.setBackground(Colores.ESTADO_AMBAR);
+            combo.setForeground(Colores.ESTADO_AMBAR_TX);
+        } else {
+            combo.setBackground(Colores.FONDO_SUPERFICIE);
+            combo.setForeground(Colores.TEXTO_SECUNDARIO);
+        }
     }
 
     // ============================================================
@@ -310,26 +374,19 @@ public class ParametrizacionPanel extends JPanel {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         gbc.insets = new Insets(4, 4, 4, 4);
 
-        DefaultTableModel model = new DefaultTableModel(new String[]{"ID Salida", "Ruta", "Fecha", "Hora", "Bus", "Estado", "Acciones"}, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return col == 5 || col == 6; }
+        DefaultTableModel model = new DefaultTableModel(new String[]{"ID Salida", "Ruta", "Fecha", "Hora", "Bus", "Estado", "Pasajes vendidos", "Acciones"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return col == 5 || col == 7; }
             @Override
             public Class<?> getColumnClass(int col) {
                 if (col == 5) return String.class;
-                if (col == 6) return JButton.class;
+                if (col == 7) return JButton.class;
                 return super.getColumnClass(col);
             }
         };
 
-        JComboBox<String> rutaCombo = new JComboBox<>();
-        for (Ruta r : empresa.listarRutas()) {
-            rutaCombo.addItem(r.getCodigo() + " — " + r.getOrigen() + " \u2192 " + r.getDestino());
-        }
-        JComboBox<String> busCombo = new JComboBox<>();
-        for (Bus b : empresa.listarBuses()) {
-            if (Bus.DISPONIBLE.equals(b.getEstado())) {
-                busCombo.addItem(b.getPlaca() + " (Cap: " + b.getCapacidad() + ")");
-            }
-        }
+        rutaComboSalidas = new JComboBox<>();
+        busComboSalidas = new JComboBox<>();
+        cargarItemsCombosSalidas();
 
         SpinnerDateModel dateModel = new SpinnerDateModel();
         JSpinner fechaSpinner = new JSpinner(dateModel);
@@ -342,8 +399,8 @@ public class ParametrizacionPanel extends JPanel {
         JTextField precioField = new JTextField(10);
         precioField.setEditable(false);
 
-        rutaCombo.addActionListener(e -> {
-            String selected = (String) rutaCombo.getSelectedItem();
+        rutaComboSalidas.addActionListener(e -> {
+            String selected = (String) rutaComboSalidas.getSelectedItem();
             if (selected != null) {
                 String cod = selected.split(" —")[0].trim();
                 Ruta r = empresa.getRutaPorCodigo(cod);
@@ -356,9 +413,14 @@ public class ParametrizacionPanel extends JPanel {
         programarBtn.setBackground(Colores.AZUL_PRIMARIO);
         programarBtn.setForeground(Color.WHITE);
 
+        JButton finalizarBtn = new JButton("Estado Finalizado Salida");
+        finalizarBtn.setBackground(Colores.ESTADO_AMBAR);
+        finalizarBtn.setForeground(Colores.ESTADO_AMBAR_TX);
+        finalizarBtn.setToolTipText("Cambia estado a FINALIZADA solo si la salida tiene m\u00ednimo 2 d\u00edas de antig\u00fcedad");
+
         programarBtn.addActionListener(e -> {
-            String rutaSel = (String) rutaCombo.getSelectedItem();
-            String busSel = (String) busCombo.getSelectedItem();
+            String rutaSel = (String) rutaComboSalidas.getSelectedItem();
+            String busSel = (String) busComboSalidas.getSelectedItem();
             if (rutaSel == null || busSel == null) return;
             String codRuta = rutaSel.split(" —")[0].trim();
             String placa = busSel.split(" \\(")[0].trim();
@@ -380,20 +442,33 @@ public class ParametrizacionPanel extends JPanel {
             actualizarTablaSalidas(empresa.listarSalidas(), model);
         });
 
+        finalizarBtn.addActionListener(e -> {
+            String id = JOptionPane.showInputDialog(panel, "Ingrese el ID de la salida a finalizar:");
+            if (id == null || id.trim().isEmpty()) return;
+            boolean ok = empresa.finalizarSalida(id.trim());
+            if (ok) {
+                JOptionPane.showMessageDialog(panel, "Salida finalizada exitosamente.");
+            } else {
+                JOptionPane.showMessageDialog(panel, "No se puede finalizar la salida. Verifique que est\u00e9 en estado PROGRAMADA o EN_RUTA y que tenga m\u00ednimo 2 d\u00edas de antig\u00fcedad.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
+            actualizarTablaSalidas(empresa.listarSalidas(), model);
+        });
+
         JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         btnPanel.setOpaque(false);
         btnPanel.add(limpiarBtn);
         btnPanel.add(programarBtn);
+        btnPanel.add(finalizarBtn);
 
         gbc.gridx = 0; gbc.gridy = 0;
         form.add(new JLabel("Ruta:"), gbc);
         gbc.gridx = 1;
-        form.add(rutaCombo, gbc);
+        form.add(rutaComboSalidas, gbc);
 
         gbc.gridx = 0; gbc.gridy = 1;
         form.add(new JLabel("Bus:"), gbc);
         gbc.gridx = 1;
-        form.add(busCombo, gbc);
+        form.add(busComboSalidas, gbc);
 
         gbc.gridx = 0; gbc.gridy = 2;
         form.add(new JLabel("Fecha:"), gbc);
@@ -417,7 +492,7 @@ public class ParametrizacionPanel extends JPanel {
 
         JPanel filterPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 5));
         filterPanel.setOpaque(false);
-        JComboBox<String> estadoFiltro = new JComboBox<>(new String[]{"Todos", Salida.PROGRAMADA, Salida.EN_RUTA, Salida.COMPLETADA, Salida.CANCELADA});
+        JComboBox<String> estadoFiltro = new JComboBox<>(new String[]{"Todos", Salida.PROGRAMADA, Salida.EN_RUTA, Salida.FINALIZADA, Salida.CANCELADA});
         JButton filtrarBtn = new JButton("Filtrar");
         filterPanel.add(new JLabel("Estado:"));
         filterPanel.add(estadoFiltro);
@@ -439,9 +514,9 @@ public class ParametrizacionPanel extends JPanel {
         JTable table = new JTable(model);
         table.setRowHeight(28);
 
-        JComboBox<String> estadoComboEditor = new JComboBox<>(new String[]{Salida.PROGRAMADA, Salida.EN_RUTA, Salida.COMPLETADA, Salida.CANCELADA});
+        JComboBox<String> estadoComboEditor = new JComboBox<>(new String[]{Salida.PROGRAMADA, Salida.EN_RUTA, Salida.FINALIZADA, Salida.CANCELADA});
         table.getColumn("Estado").setCellRenderer(new EstadoRenderer());
-        table.getColumn("Estado").setCellEditor(new EstadoComboEditor(estadoComboEditor, empresa, model));
+        table.getColumn("Estado").setCellEditor(new EstadoComboEditor(estadoComboEditor, empresa, model, this));
 
         table.getColumn("Acciones").setCellRenderer(new ButtonRenderer());
         table.getColumn("Acciones").setCellEditor(new ButtonEditor(new JButton("Editar"), e -> {
@@ -484,12 +559,26 @@ public class ParametrizacionPanel extends JPanel {
         return panel;
     }
 
+    private void cargarItemsCombosSalidas() {
+        rutaComboSalidas.removeAllItems();
+        for (Ruta r : empresa.listarRutas()) {
+            rutaComboSalidas.addItem(r.getCodigo() + " — " + r.getOrigen() + " \u2192 " + r.getDestino());
+        }
+        busComboSalidas.removeAllItems();
+        for (Bus b : empresa.listarBuses()) {
+            if (Bus.DISPONIBLE.equals(b.getEstado())) {
+                busComboSalidas.addItem(b.getPlaca() + " (Cap: " + b.getCapacidad() + ")");
+            }
+        }
+    }
+
     private void actualizarTablaSalidas(java.util.List<Salida> salidas, DefaultTableModel model) {
         if (model == null) return;
         model.setRowCount(0);
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
         DateTimeFormatter horaFmt = DateTimeFormatter.ofPattern("HH:mm");
         for (Salida s : salidas) {
+            int vendidos = s.totalPasajesVendidos(empresa.getMyTickets());
             model.addRow(new Object[]{
                 s.getIdSalida(),
                 s.getMyRuta().getCodigo(),
@@ -497,6 +586,163 @@ public class ParametrizacionPanel extends JPanel {
                 s.getFecha().format(horaFmt),
                 s.getMyBus().getPlaca(),
                 s.getEstado(),
+                vendidos,
+                "Editar"
+            });
+        }
+    }
+
+    // ============================================================
+    // TAB CONDUCTORES
+    // ============================================================
+
+    private JPanel crearPanelConductores() {
+        JPanel panel = new JPanel(new BorderLayout(10, 0));
+        panel.setBackground(Colores.FONDO_GENERAL);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setBackground(Colores.FONDO_TARJETA);
+        form.setBorder(BorderFactory.createCompoundBorder(
+            new LineBorder(Colores.BORDE, 1),
+            BorderFactory.createEmptyBorder(15, 15, 15, 15)
+        ));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.insets = new Insets(4, 4, 4, 4);
+
+        JTextField cedulaField = new JTextField(10);
+        JTextField nombreField = new JTextField(10);
+        JTextField direccionField = new JTextField(10);
+        JTextField correoField = new JTextField(10);
+        JTextField telefonoField = new JTextField(10);
+        JFormattedTextField sueldoField = new JFormattedTextField(NumberFormat.getNumberInstance());
+        sueldoField.setColumns(10);
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        form.add(new JLabel("C\u00e9dula:"), gbc);
+        gbc.gridx = 1;
+        form.add(cedulaField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 1;
+        form.add(new JLabel("Nombre:"), gbc);
+        gbc.gridx = 1;
+        form.add(nombreField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 2;
+        form.add(new JLabel("Direcci\u00f3n:"), gbc);
+        gbc.gridx = 1;
+        form.add(direccionField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 3;
+        form.add(new JLabel("Correo:"), gbc);
+        gbc.gridx = 1;
+        form.add(correoField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 4;
+        form.add(new JLabel("Tel\u00e9fono:"), gbc);
+        gbc.gridx = 1;
+        form.add(telefonoField, gbc);
+
+        gbc.gridx = 0; gbc.gridy = 5;
+        form.add(new JLabel("Sueldo:"), gbc);
+        gbc.gridx = 1;
+        form.add(sueldoField, gbc);
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        btnPanel.setOpaque(false);
+        JButton limpiarBtn = new JButton("Limpiar");
+        JButton guardarBtn = new JButton("Guardar conductor");
+        guardarBtn.setBackground(Colores.AZUL_PRIMARIO);
+        guardarBtn.setForeground(Color.WHITE);
+        btnPanel.add(limpiarBtn);
+        btnPanel.add(guardarBtn);
+
+        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2;
+        form.add(btnPanel, gbc);
+
+        DefaultTableModel model = new DefaultTableModel(new String[]{"C\u00e9dula", "Nombre", "Correo", "Tel\u00e9fono", "Sueldo", "Acciones"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return col == 5; }
+        };
+
+        guardarBtn.addActionListener(e -> {
+            String cedula = cedulaField.getText().trim();
+            String nombre = nombreField.getText().trim();
+            String direccion = direccionField.getText().trim();
+            String correo = correoField.getText().trim();
+            String telefono = telefonoField.getText().trim();
+            float sueldo;
+            try {
+                sueldo = Float.parseFloat(sueldoField.getText().replaceAll("[.,]", ""));
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this, "Sueldo inv\u00e1lido");
+                return;
+            }
+            if (cedula.isEmpty() || nombre.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "C\u00e9dula y nombre son obligatorios");
+                return;
+            }
+            if (editingConductorCedula != null) {
+                empresa.editarConductor(editingConductorCedula, nombre, direccion, correo, telefono, sueldo);
+                editingConductorCedula = null;
+                cedulaField.setEditable(true);
+            } else {
+                empresa.crearConductor(cedula, nombre, direccion, correo, telefono, sueldo);
+            }
+            actualizarTablaConductores(model);
+            limpiarCampos(cedulaField, nombreField, direccionField, correoField, telefonoField, sueldoField);
+        });
+
+        limpiarBtn.addActionListener(e -> {
+            limpiarCampos(cedulaField, nombreField, direccionField, correoField, telefonoField, sueldoField);
+            editingConductorCedula = null;
+            cedulaField.setEditable(true);
+        });
+
+        JTable table = new JTable(model) {
+            @Override
+            public Class<?> getColumnClass(int col) {
+                if (col == 5) return JButton.class;
+                return super.getColumnClass(col);
+            }
+        };
+        table.setRowHeight(28);
+        actualizarTablaConductores(model);
+
+        table.getColumn("Acciones").setCellRenderer(new ButtonRenderer());
+        table.getColumn("Acciones").setCellEditor(new ButtonEditor(new JButton("Editar"), e -> {
+            int row = table.getSelectedRow();
+            if (row >= 0) {
+                editingConductorCedula = model.getValueAt(row, 0).toString();
+                // Buscar el conductor para obtener la dirección (no está en la tabla)
+                Conductor c = empresa.getConductorPorCedula(editingConductorCedula);
+                cedulaField.setText(editingConductorCedula);
+                cedulaField.setEditable(false);
+                nombreField.setText(model.getValueAt(row, 1).toString());
+                correoField.setText(model.getValueAt(row, 2).toString());
+                telefonoField.setText(model.getValueAt(row, 3).toString());
+                sueldoField.setText(model.getValueAt(row, 4).toString().replaceAll("[^0-9]", ""));
+                if (c != null) {
+                    direccionField.setText(c.getDireccion());
+                }
+            }
+        }));
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, form, new JScrollPane(table));
+        split.setDividerLocation(300);
+        panel.add(split, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void actualizarTablaConductores(DefaultTableModel model) {
+        model.setRowCount(0);
+        for (Conductor c : empresa.listarConductores()) {
+            model.addRow(new Object[]{
+                c.getCedula(),
+                c.getNombre(),
+                c.getCorreo(),
+                c.getTelefono(),
+                String.format("$%,.0f", c.getSueldo()),
                 "Editar"
             });
         }
@@ -505,10 +751,6 @@ public class ParametrizacionPanel extends JPanel {
     // ============================================================
     // HELPERS
     // ============================================================
-
-    private int getCapacidadPorTipo(String tipo) {
-        return "EJECUTIVO".equalsIgnoreCase(tipo) ? 40 : 30;
-    }
 
     private void limpiarCampos(JTextField... campos) {
         for (JTextField c : campos) c.setText("");
@@ -528,9 +770,9 @@ public class ParametrizacionPanel extends JPanel {
                 setBackground(Colores.ESTADO_VERDE);
                 setForeground(Colores.ESTADO_VERDE_TX);
             } else if (Salida.EN_RUTA.equals(estado)) {
-                setBackground(Colores.ESTADO_AZUL_TX);
+                setBackground(Colores.AZUL_MEDIO);
                 setForeground(Color.WHITE);
-            } else if (Salida.COMPLETADA.equals(estado)) {
+            } else if (Salida.FINALIZADA.equals(estado)) {
                 setBackground(Colores.FONDO_SUPERFICIE);
                 setForeground(Colores.TEXTO_SECUNDARIO);
             } else if (Salida.CANCELADA.equals(estado)) {
@@ -548,13 +790,15 @@ public class ParametrizacionPanel extends JPanel {
         private final JComboBox<String> combo;
         private final EmpresaTransporte empresa;
         private final DefaultTableModel model;
+        private final JPanel parent;
         private int editingRow;
         private String valorAnterior;
 
-        public EstadoComboEditor(JComboBox<String> combo, EmpresaTransporte empresa, DefaultTableModel model) {
+        public EstadoComboEditor(JComboBox<String> combo, EmpresaTransporte empresa, DefaultTableModel model, JPanel parent) {
             this.combo = combo;
             this.empresa = empresa;
             this.model = model;
+            this.parent = parent;
             combo.addActionListener(e -> fireEditingStopped());
         }
         @Override
@@ -569,6 +813,13 @@ public class ParametrizacionPanel extends JPanel {
             String nuevoEstado = (String) combo.getSelectedItem();
             if (nuevoEstado != null && !nuevoEstado.equals(valorAnterior) && editingRow >= 0) {
                 String idSalida = model.getValueAt(editingRow, 0).toString();
+                if (Salida.EN_RUTA.equals(nuevoEstado)) {
+                    boolean efectiva = empresa.esSalidaEfectiva(idSalida);
+                    if (!efectiva) {
+                        JOptionPane.showMessageDialog(parent, "La salida debe tener m\u00ednimo 5 pasajes vendidos para pasar a EN_RUTA.", "Validaci\u00f3n", JOptionPane.WARNING_MESSAGE);
+                        return valorAnterior;
+                    }
+                }
                 empresa.editarSalida(idSalida, nuevoEstado);
             }
             return nuevoEstado != null ? nuevoEstado : valorAnterior;

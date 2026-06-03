@@ -2,10 +2,8 @@ package negocio;
 
 public class BusTipoEjecutivo extends Bus {
 
-    private static final int CAPACIDAD_FIJA = 40;
-
-    public BusTipoEjecutivo(String placa, String estado) {
-        super(placa, estado, CAPACIDAD_FIJA);
+    public BusTipoEjecutivo(String placa, String estado, int capacidad) {
+        super(placa, estado, capacidad);
     }
 
     @Override

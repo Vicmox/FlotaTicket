@@ -155,9 +155,9 @@ public class DashboardPanel extends JPanel {
 
     public void actualizarDatos() {
         CajaVenta caja = empresa.getCajaVenta();
-        vendidosLabel.setText(String.valueOf(caja.getTotalVendidos()));
+        vendidosLabel.setText(String.valueOf((int)caja.getTotalVendido()));
         ingresoLabel.setText(String.format("$%,.0f", caja.getIngresoNeto()));
-        reembolsosLabel.setText(String.valueOf(caja.getTotalReembolsos()));
+        reembolsosLabel.setText(String.valueOf((int)caja.getTotalReembolsado()));
 
         int activos = 0;
         for (Bus b : empresa.listarBuses()) {

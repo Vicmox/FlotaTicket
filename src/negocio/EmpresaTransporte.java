@@ -1,5 +1,6 @@
 package negocio;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -13,6 +14,8 @@ public class EmpresaTransporte {
     private List<PasajeTicket> myTickets;
     private CajaVenta myCaja;
     private List<Empleado> myEmpleado;
+    private List<Conductor> myConductores;
+    private List<Pasajero> myPasajeros;
     private int secuencialSalida;
     private int secuencialRuta;
 
@@ -22,6 +25,8 @@ public class EmpresaTransporte {
         this.mySalidas = new ArrayList<>();
         this.myTickets = new ArrayList<>();
         this.myEmpleado = new ArrayList<>();
+        this.myConductores = new ArrayList<>();
+        this.myPasajeros = new ArrayList<>();
         this.myCaja = new CajaVenta();
         this.secuencialSalida = 1;
         this.secuencialRuta = 5;
@@ -38,18 +43,20 @@ public class EmpresaTransporte {
     public List<PasajeTicket> getMyTickets() { return myTickets; }
     public CajaVenta getMyCaja() { return myCaja; }
     public List<Empleado> getMyEmpleado() { return myEmpleado; }
+    public List<Conductor> getMyConductores() { return myConductores; }
+    public List<Pasajero> getMyPasajeros() { return myPasajeros; }
 
     // ============================================================
     // RF1 — CRUD Buses
     // ============================================================
 
-    public boolean crearBus(String placa, String estado, String tipo) {
+    public boolean crearBus(String placa, String estado, String tipo, int capacidad) {
         if (busExiste(placa)) return false;
         Bus bus;
         if ("EJECUTIVO".equalsIgnoreCase(tipo)) {
-            bus = new BusTipoEjecutivo(placa, estado);
+            bus = new BusTipoEjecutivo(placa, estado, capacidad);
         } else {
-            bus = new BusTipoNormal(placa, estado);
+            bus = new BusTipoNormal(placa, estado, capacidad);
         }
         myBuses.add(bus);
         return true;
@@ -139,45 +146,127 @@ public class EmpresaTransporte {
     }
 
     // ============================================================
-    // RF2 — Venta de pasaje individual
+    // RF1 — CRUD Conductores (NUEVO)
     // ============================================================
 
-    public boolean registrarPasajeroYSilla(String idSalida, int numeroPuesto, Pasajero pasajero) {
+    public boolean crearConductor(String cedula, String nombre, String direccion, String correo, String telefono, float sueldo) {
+        if (conductorExiste(cedula)) return false;
+        myConductores.add(new Conductor(cedula, nombre, direccion, correo, telefono, sueldo));
+        return true;
+    }
+
+    public List<Conductor> listarConductores() {
+        return new ArrayList<>(myConductores);
+    }
+
+    public boolean editarConductor(String cedula, String nuevoNombre, String nuevaDireccion, String nuevoCorreo, String nuevoTelefono, float nuevoSueldo) {
+        Conductor c = getConductorPorCedula(cedula);
+        if (c == null) return false;
+        c.setNombre(nuevoNombre);
+        c.setDireccion(nuevaDireccion);
+        c.setCorreo(nuevoCorreo);
+        c.setTelefono(nuevoTelefono);
+        c.setSueldo(nuevoSueldo);
+        return true;
+    }
+
+    public boolean eliminarConductor(String cedula) {
+        Conductor c = getConductorPorCedula(cedula);
+        if (c == null) return false;
+        myConductores.remove(c);
+        return true;
+    }
+
+    // ============================================================
+    // RF2 — Venta de pasaje (1 o más tiquetes en puestos consecutivos)
+    // ============================================================
+
+    public Pasajero buscarOCrearPasajero(String cedula, String nombre, String direccion, String correo, String telefono) {
+        for (Pasajero p : myPasajeros) {
+            if (p.getCedula().equals(cedula)) {
+                return p;
+            }
+        }
+        Pasajero nuevo = new Pasajero(cedula, nombre, direccion, "P-" + cedula, correo, telefono);
+        myPasajeros.add(nuevo);
+        return nuevo;
+    }
+
+    public int[] verificarPuestosConsecutivos(Salida salida, int cantidad) {
+        Puesto[] puestos = salida.getMyBus().getMyPuestos();
+        for (int i = 0; i <= puestos.length - cantidad; i++) {
+            boolean bloqueLibre = true;
+            for (int j = 0; j < cantidad; j++) {
+                if (!puestos[i + j].estaLibre()) {
+                    bloqueLibre = false;
+                    break;
+                }
+            }
+            if (bloqueLibre) {
+                int[] bloque = new int[cantidad];
+                for (int j = 0; j < cantidad; j++) {
+                    bloque[j] = i + j + 1; // 1-based
+                }
+                return bloque;
+            }
+        }
+        return null;
+    }
+
+    public boolean registrarPasajerosYSillas(String idSalida, int[] numerosPuestos, Pasajero[] pasajeros) {
         Salida salida = getSalidaPorId(idSalida);
         if (salida == null) return false;
         if (!Salida.PROGRAMADA.equals(salida.getEstado())) return false;
 
         Puesto[] puestos = salida.getMyBus().getMyPuestos();
-        if (numeroPuesto < 1 || numeroPuesto > puestos.length) return false;
-        if (!puestos[numeroPuesto - 1].estaLibre()) return false;
+        for (int num : numerosPuestos) {
+            if (num < 1 || num > puestos.length) return false;
+            if (!puestos[num - 1].estaLibre()) return false;
+        }
 
-        puestos[numeroPuesto - 1].setMyPasajero(pasajero);
+        for (int i = 0; i < numerosPuestos.length; i++) {
+            puestos[numerosPuestos[i] - 1].setMyPasajero(pasajeros[i]);
+        }
         return true;
     }
 
-    public float calcularValorPasaje(String idSalida) {
+    private PasajeTicket[] crearTicketsInterno(String idSalida, int[] numerosPuestos, Pasajero[] pasajeros, boolean idaYVuelta) {
+        if (!registrarPasajerosYSillas(idSalida, numerosPuestos, pasajeros)) return null;
+
         Salida salida = getSalidaPorId(idSalida);
-        if (salida == null) return 0f;
-        return salida.getMyRuta().getTarifa();
+        float tarifaBase = salida.getMyRuta().getTarifa();
+        PasajeTicket[] tickets = new PasajeTicket[numerosPuestos.length];
+
+        for (int i = 0; i < numerosPuestos.length; i++) {
+            Pasajero p = pasajeros[i];
+            float valor = tarifaBase;
+            if (p.esPreferencial()) {
+                valor = tarifaBase * 0.9f; // 10% descuento preferencial
+            }
+            PasajeTicket ticket = new PasajeTicket(salida, numerosPuestos[i], valor, PasajeTicket.VIGENTE, p, idaYVuelta);
+            tickets[i] = ticket;
+            myTickets.add(ticket);
+            p.incrementarPasajes();
+        }
+
+        return tickets;
     }
 
-    public PasajeTicket generarTicket(String idSalida, int numeroPuesto, Pasajero pasajero) {
-        if (!registrarPasajeroYSilla(idSalida, numeroPuesto, pasajero)) return null;
-
-        Salida salida = getSalidaPorId(idSalida);
-        float valor = salida.getMyRuta().getTarifa();
-        PasajeTicket ticket = new PasajeTicket(salida, numeroPuesto, valor, PasajeTicket.VIGENTE, pasajero);
-        myTickets.add(ticket);
-        myCaja.registrarVenta(valor);
-        return ticket;
+    public PasajeTicket[] generarTickets(String idSalida, int[] numerosPuestos, Pasajero[] pasajeros, boolean idaYVuelta) {
+        PasajeTicket[] tickets = crearTicketsInterno(idSalida, numerosPuestos, pasajeros, idaYVuelta);
+        if (tickets == null) return null;
+        float total = 0f;
+        for (PasajeTicket t : tickets) total += t.getValorPagar();
+        myCaja.registrarVenta(total);
+        return tickets;
     }
 
     // ============================================================
     // RF3 — Venta ida y vuelta
     // ============================================================
 
-    public boolean ventaIdaYVuelta(String idSalidaIda, int puestoIda, Pasajero pasajeroIda,
-                                   String idSalidaVuelta, int puestoVuelta, Pasajero pasajeroVuelta) {
+    public boolean ventaIdaYVuelta(String idSalidaIda, int[] puestosIda, Pasajero[] pasajerosIda,
+                                   String idSalidaVuelta, int[] puestosVuelta, Pasajero[] pasajerosVuelta) {
         Salida salidaIda = getSalidaPorId(idSalidaIda);
         Salida salidaVuelta = getSalidaPorId(idSalidaVuelta);
 
@@ -185,23 +274,32 @@ public class EmpresaTransporte {
         if (!salidaIda.getMyRuta().getCodigo().equals(salidaVuelta.getMyRuta().getCodigo())) return false;
         if (!Salida.PROGRAMADA.equals(salidaIda.getEstado()) || !Salida.PROGRAMADA.equals(salidaVuelta.getEstado())) return false;
 
-        float tarifaIda = salidaIda.getMyRuta().getTarifa();
-        float tarifaVuelta = salidaVuelta.getMyRuta().getTarifa();
-        float totalSinDescuento = tarifaIda + tarifaVuelta;
-        float totalConDescuento = totalSinDescuento * 0.9f;
+        // Verificar consecutividad y disponibilidad en ambas salidas
+        if (verificarPuestosConsecutivos(salidaIda, puestosIda.length) == null) return false;
+        if (verificarPuestosConsecutivos(salidaVuelta, puestosVuelta.length) == null) return false;
 
-        if (!registrarPasajeroYSilla(idSalidaIda, puestoIda, pasajeroIda)) return false;
-        if (!registrarPasajeroYSilla(idSalidaVuelta, puestoVuelta, pasajeroVuelta)) return false;
+        // Generar tickets ida (sin tocar caja aún)
+        PasajeTicket[] ticketsIda = crearTicketsInterno(idSalidaIda, puestosIda, pasajerosIda, true);
+        if (ticketsIda == null) return false;
 
-        float valorIda = tarifaIda * 0.9f;
-        float valorVuelta = tarifaVuelta * 0.9f;
+        // Generar tickets vuelta (sin tocar caja aún)
+        PasajeTicket[] ticketsVuelta = crearTicketsInterno(idSalidaVuelta, puestosVuelta, pasajerosVuelta, true);
+        if (ticketsVuelta == null) {
+            // Rollback ida: liberar puestos y marcar como reembolsado
+            for (PasajeTicket t : ticketsIda) {
+                t.setEstado(PasajeTicket.REEMBOLSADO);
+                t.getMySalida().getMyBus().getMyPuestos()[t.getPuesto() - 1].setMyPasajero(null);
+            }
+            return false;
+        }
 
-        PasajeTicket ticketIda = new PasajeTicket(salidaIda, puestoIda, valorIda, PasajeTicket.VIGENTE, pasajeroIda);
-        PasajeTicket ticketVuelta = new PasajeTicket(salidaVuelta, puestoVuelta, valorVuelta, PasajeTicket.VIGENTE, pasajeroVuelta);
-
-        myTickets.add(ticketIda);
-        myTickets.add(ticketVuelta);
-        myCaja.registrarVenta(totalConDescuento);
+        // Calcular total con descuento del 10% sobre el valor total (ida + vuelta)
+        float totalIda = 0f;
+        for (PasajeTicket t : ticketsIda) totalIda += t.getValorPagar();
+        float totalVuelta = 0f;
+        for (PasajeTicket t : ticketsVuelta) totalVuelta += t.getValorPagar();
+        float totalGlobal = (totalIda + totalVuelta) * 0.9f;
+        myCaja.registrarVenta(totalGlobal);
         return true;
     }
 
@@ -241,23 +339,7 @@ public class EmpresaTransporte {
 
     private void reprogramarTicket(PasajeTicket ticket) {
         Salida salidaOriginal = ticket.getMySalida();
-        String codigoRuta = salidaOriginal.getMyRuta().getCodigo();
-
-        Salida nuevaSalida = null;
-        for (Salida s : mySalidas) {
-            if (s.getMyRuta().getCodigo().equals(codigoRuta)
-                && Salida.PROGRAMADA.equals(s.getEstado())
-                && s.getFecha().isAfter(salidaOriginal.getFecha())) {
-
-                for (Puesto p : s.getMyBus().getMyPuestos()) {
-                    if (p.estaLibre()) {
-                        nuevaSalida = s;
-                        break;
-                    }
-                }
-                if (nuevaSalida != null) break;
-            }
-        }
+        Salida nuevaSalida = buscarSalidaProxima(salidaOriginal);
 
         if (nuevaSalida != null) {
             Puesto[] puestos = nuevaSalida.getMyBus().getMyPuestos();
@@ -266,17 +348,90 @@ public class EmpresaTransporte {
                     puestos[i].setMyPasajero(ticket.getMyPasajero());
                     ticket.setMySalida(nuevaSalida);
                     ticket.setPuesto(i + 1);
-                    break;
+                    return;
                 }
             }
-        } else {
-            ticket.setEstado(PasajeTicket.REEMBOLSADO);
-            myCaja.registrarReembolso(ticket.getValorPagar());
         }
+
+        // Si no se encontró salida válida o no hay cupo: reembolso automático
+        ticket.setEstado(PasajeTicket.REEMBOLSADO);
+        myCaja.registrarReembolso(ticket.getValorPagar());
+    }
+
+    public Salida buscarSalidaProxima(Salida salidaCancelada) {
+        String codigoRuta = salidaCancelada.getMyRuta().getCodigo();
+        LocalDateTime fechaCancelada = salidaCancelada.getFecha();
+        LocalDate fechaCanceladaDia = fechaCancelada.toLocalDate();
+
+        // Prioridad 1: mismo día, hora posterior
+        Salida candidata = null;
+        for (Salida s : mySalidas) {
+            if (s.getMyRuta().getCodigo().equals(codigoRuta)
+                && Salida.PROGRAMADA.equals(s.getEstado())
+                && s.getFecha().toLocalDate().equals(fechaCanceladaDia)
+                && s.getFecha().isAfter(fechaCancelada)) {
+
+                for (Puesto p : s.getMyBus().getMyPuestos()) {
+                    if (p.estaLibre()) {
+                        if (candidata == null || s.getFecha().isBefore(candidata.getFecha())) {
+                            candidata = s;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        if (candidata != null) return candidata;
+
+        // Prioridad 2: día siguiente (máximo 1 día después)
+        LocalDate diaSiguiente = fechaCanceladaDia.plusDays(1);
+        for (Salida s : mySalidas) {
+            if (s.getMyRuta().getCodigo().equals(codigoRuta)
+                && Salida.PROGRAMADA.equals(s.getEstado())
+                && s.getFecha().toLocalDate().equals(diaSiguiente)) {
+
+                for (Puesto p : s.getMyBus().getMyPuestos()) {
+                    if (p.estaLibre()) {
+                        if (candidata == null || s.getFecha().isBefore(candidata.getFecha())) {
+                            candidata = s;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        return candidata;
     }
 
     // ============================================================
-    // RF5 — Reportes (delegados a CajaVenta)
+    // RF5 — Finalización de salida
+    // ============================================================
+
+    public boolean finalizarSalida(String idSalida) {
+        Salida salida = getSalidaPorId(idSalida);
+        if (salida == null) return false;
+        if (!Salida.PROGRAMADA.equals(salida.getEstado()) && !Salida.EN_RUTA.equals(salida.getEstado())) {
+            return false;
+        }
+        if (!salida.puedeFinalizarse()) {
+            return false;
+        }
+        salida.setEstado(Salida.FINALIZADA);
+        return true;
+    }
+
+    // ============================================================
+    // RF6 — Validación de salida efectiva
+    // ============================================================
+
+    public boolean esSalidaEfectiva(String idSalida) {
+        Salida salida = getSalidaPorId(idSalida);
+        if (salida == null) return false;
+        return salida.esSalidaEfectiva(myTickets);
+    }
+
+    // ============================================================
+    // RF7 — Reportes (delegados a CajaVenta)
     // ============================================================
 
     public CajaVenta getCajaVenta() {
@@ -319,6 +474,10 @@ public class EmpresaTransporte {
         return false;
     }
 
+    private boolean conductorExiste(String cedula) {
+        return getConductorPorCedula(cedula) != null;
+    }
+
     public Ruta getRutaPorCodigo(String codigo) {
         for (Ruta r : myRutas) {
             if (r.getCodigo().equals(codigo)) return r;
@@ -340,6 +499,20 @@ public class EmpresaTransporte {
         return null;
     }
 
+    public Conductor getConductorPorCedula(String cedula) {
+        for (Conductor c : myConductores) {
+            if (c.getCedula().equals(cedula)) return c;
+        }
+        return null;
+    }
+
+    public Pasajero getPasajeroPorCedula(String cedula) {
+        for (Pasajero p : myPasajeros) {
+            if (p.getCedula().equals(cedula)) return p;
+        }
+        return null;
+    }
+
     private LocalDateTime parseFecha(String fechaHora) {
         return LocalDateTime.parse(fechaHora, DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"));
     }
@@ -354,12 +527,12 @@ public class EmpresaTransporte {
         myRutas.add(new Ruta("R03", "Cúcuta", "Medellín", 180000f));
         myRutas.add(new Ruta("R04", "Cúcuta", "Cartagena", 220000f));
 
-        myBuses.add(new BusTipoNormal("KAA-101", "DISPONIBLE"));
-        myBuses.add(new BusTipoEjecutivo("KBB-202", "DISPONIBLE"));
-        myBuses.add(new BusTipoNormal("KCC-303", "DISPONIBLE"));
-        myBuses.add(new BusTipoEjecutivo("KDD-404", "DISPONIBLE"));
-        myBuses.add(new BusTipoNormal("KEE-505", "MANTENIMIENTO"));
-        myBuses.add(new BusTipoNormal("KFF-606", "DISPONIBLE"));
+        myBuses.add(new BusTipoNormal("KAA-101", "DISPONIBLE", 40));
+        myBuses.add(new BusTipoEjecutivo("KBB-202", "DISPONIBLE", 30));
+        myBuses.add(new BusTipoNormal("KCC-303", "DISPONIBLE", 40));
+        myBuses.add(new BusTipoEjecutivo("KDD-404", "DISPONIBLE", 30));
+        myBuses.add(new BusTipoNormal("KEE-505", "MANTENIMIENTO", 40));
+        myBuses.add(new BusTipoNormal("KFF-606", "DISPONIBLE", 30));
 
         mySalidas.add(new Salida("S001", getRutaPorCodigo("R01"), parseFecha("15/03/2026 06:00"), getBusPorPlaca("KAA-101"), "PROGRAMADA"));
         mySalidas.add(new Salida("S002", getRutaPorCodigo("R01"), parseFecha("15/03/2026 14:00"), getBusPorPlaca("KBB-202"), "PROGRAMADA"));

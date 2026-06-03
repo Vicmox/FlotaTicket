@@ -8,7 +8,11 @@ public class Ruta {
 
     public Ruta(String codigo, String origen, String destino, float tarifa) {
         this.codigo = codigo;
-        this.origen = origen;
+        if (origen == null || origen.isEmpty()) {
+            this.origen = "Cúcuta";
+        } else {
+            this.origen = origen;
+        }
         this.destino = destino;
         this.tarifa = tarifa;
     }

@@ -1,11 +1,13 @@
 package negocio;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.util.List;
 
 public class Salida {
     public static final String PROGRAMADA = "PROGRAMADA";
     public static final String EN_RUTA = "EN_RUTA";
-    public static final String COMPLETADA = "COMPLETADA";
+    public static final String FINALIZADA = "FINALIZADA";
     public static final String CANCELADA = "CANCELADA";
 
     private String idSalida;
@@ -36,4 +38,25 @@ public class Salida {
 
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
+
+    public int totalPasajesVendidos(List<PasajeTicket> tickets) {
+        int count = 0;
+        for (PasajeTicket t : tickets) {
+            if (t.getMySalida().getIdSalida().equals(this.idSalida)
+                && PasajeTicket.VIGENTE.equals(t.getEstado())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public boolean esSalidaEfectiva(List<PasajeTicket> tickets) {
+        return totalPasajesVendidos(tickets) >= 5;
+    }
+
+    public boolean puedeFinalizarse() {
+        LocalDate fechaSalida = this.fecha.toLocalDate();
+        LocalDate limite = LocalDate.now().minusDays(2);
+        return fechaSalida.isBefore(limite) || fechaSalida.isEqual(limite);
+    }
 }

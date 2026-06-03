@@ -4,36 +4,34 @@ import java.util.List;
 
 public class CajaVenta {
     private float montoCaja;
-    private int totalVendidos;
-    private int totalReembolsado;
-    private float ingresoNeto;
+    private float totalVendido;
+    private float totalReembolsado;
 
     public CajaVenta() {
         this.montoCaja = 0f;
-        this.totalVendidos = 0;
-        this.totalReembolsado = 0;
-        this.ingresoNeto = 0f;
+        this.totalVendido = 0f;
+        this.totalReembolsado = 0f;
     }
 
     public void registrarVenta(float monto) {
         this.montoCaja += monto;
-        this.totalVendidos++;
-        this.ingresoNeto += monto;
+        this.totalVendido += monto;
     }
 
     public void registrarReembolso(float monto) {
         this.montoCaja -= monto;
-        this.totalReembolsado++;
-        this.ingresoNeto -= monto;
+        this.totalReembolsado += monto;
     }
 
     public float getMontoCaja() { return montoCaja; }
 
-    public int getTotalVendidos() { return totalVendidos; }
+    public float getTotalVendido() { return totalVendido; }
 
-    public int getTotalReembolsos() { return totalReembolsado; }
+    public float getTotalReembolsado() { return totalReembolsado; }
 
-    public float getIngresoNeto() { return ingresoNeto; }
+    public float getIngresoNeto() {
+        return totalVendido - totalReembolsado;
+    }
 
     public CajaVenta reportesDelDia() {
         return this;

@@ -122,7 +122,7 @@ public class CancelacionesPanel extends JPanel {
         accionesPanel.setBackground(Colores.FONDO_SUPERFICIE);
         accionesPanel.setBorder(new LineBorder(Colores.BORDE, 1));
 
-        reprogramarRadio = new JRadioButton("Reprogramar autom\u00e1ticamente");
+        reprogramarRadio = new JRadioButton("Reprogramar autom\u00e1ticamente (mismo d\u00eda hora posterior o m\u00e1ximo 1 d\u00eda despu\u00e9s)");
         reprogramarRadio.setFont(new Font("SansSerif", Font.PLAIN, 12));
         reprogramarRadio.setOpaque(false);
         reembolsarRadio = new JRadioButton("Marcar como REEMBOLSADO");

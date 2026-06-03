@@ -83,12 +83,12 @@ public class ReportesPanel extends JPanel {
 
         generarBtn.addActionListener(e -> {
             CajaVenta caja = empresa.getCajaVenta();
-            totalVendido.setText(String.format("$%,.0f", caja.getMontoCaja()));
-            reembolsado.setText(String.valueOf(caja.getTotalReembolsos()));
+            totalVendido.setText(String.format("$%,.0f", caja.getTotalVendido()));
+            reembolsado.setText(String.format("$%,.0f", caja.getTotalReembolsado()));
             ingresoNeto.setText(String.format("$%,.0f", caja.getIngresoNeto()));
             int totalCap = 0;
             for (Bus b : empresa.listarBuses()) totalCap += b.getCapacidad();
-            int totalVend = caja.getTotalVendidos();
+            int totalVend = (int)caja.getTotalVendido();
             ocupacion.setText(totalCap > 0 ? String.format("%.0f%%", totalVend * 100.0 / totalCap) : "0%");
         });
 
@@ -123,14 +123,15 @@ public class ReportesPanel extends JPanel {
         panel.setBackground(Colores.FONDO_GENERAL);
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JPanel metricas = new JPanel(new GridLayout(1, 3, 15, 0));
+        JPanel metricas = new JPanel(new GridLayout(1, 4, 15, 0));
         metricas.setOpaque(false);
 
         CajaVenta caja = empresa.getCajaVenta();
 
-        metricas.add(crearTarjetaGrande("Total vendido", String.format("$%,.0f", caja.getMontoCaja()), Colores.ESTADO_VERDE, Colores.ESTADO_VERDE_TX));
-        metricas.add(crearTarjetaGrande("Reembolsado", String.valueOf(caja.getTotalReembolsos()), Colores.ESTADO_ROJO, Colores.ESTADO_ROJO_TX));
-        metricas.add(crearTarjetaGrande("Ingreso neto", String.format("$%,.0f", caja.getIngresoNeto()), Colores.AZUL_CLARO, Colores.AZUL_PRIMARIO));
+        metricas.add(crearTarjetaGrande("Monto en caja", String.format("$%,.0f", caja.getMontoCaja()), Colores.AZUL_CLARO, Colores.AZUL_PRIMARIO));
+        metricas.add(crearTarjetaGrande("Total vendido", String.format("$%,.0f", caja.getTotalVendido()), Colores.ESTADO_VERDE, Colores.ESTADO_VERDE_TX));
+        metricas.add(crearTarjetaGrande("Reembolsado", String.format("$%,.0f", caja.getTotalReembolsado()), Colores.ESTADO_ROJO, Colores.ESTADO_ROJO_TX));
+        metricas.add(crearTarjetaGrande("Ingreso neto", String.format("$%,.0f", caja.getIngresoNeto()), new Color(200,230,200), new Color(30,100,30)));
 
         panel.add(metricas, BorderLayout.CENTER);
 
