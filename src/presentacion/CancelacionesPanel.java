@@ -189,12 +189,34 @@ public class CancelacionesPanel extends JPanel {
     private void confirmarCancelacion() {
         if (salidaEncontrada == null) return;
         boolean reembolsar = reembolsarRadio.isSelected();
-        empresa.cancelarSalida(salidaEncontrada.getIdSalida(), reembolsar);
-        JOptionPane.showMessageDialog(this,
-            "Salida " + salidaEncontrada.getIdSalida() + " cancelada.\n" +
-            (reembolsar ? "Tiquetes marcados como REEMBOLSADO." : "Tiquetes reprogramados autom\u00e1ticamente."),
-            "Proceso completado",
-            JOptionPane.INFORMATION_MESSAGE);
+        java.util.List<String> resultados = empresa.cancelarSalida(salidaEncontrada.getIdSalida(), reembolsar);
+
+        Salida s = salidaEncontrada;
+        String encabezado = "CANCELACION DE SALIDA: " + s.getIdSalida() + "  (" +
+            s.getMyRuta().getCodigo() + " " + s.getMyRuta().getOrigen() + " -> " + s.getMyRuta().getDestino() + ") " +
+            s.getFecha().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) + "\n\n" +
+            "Tiquetes procesados:\n";
+
+        StringBuilder sb = new StringBuilder(encabezado);
+        int reprogramados = 0;
+        int reembolsadosCount = 0;
+
+        for (String r : resultados) {
+            sb.append("- ").append(r).append("\n");
+            if (r.contains("REPROGRAMADO")) reprogramados++;
+            else if (r.contains("REEMBOLSADO")) reembolsadosCount++;
+        }
+
+        sb.append("\nTOTAL REPROGRAMADOS: ").append(reprogramados).append("\n");
+        sb.append("TOTAL REEMBOLSADOS: ").append(reembolsadosCount);
+
+        JTextArea textArea = new JTextArea(sb.toString());
+        textArea.setEditable(false);
+        textArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        JScrollPane scroll = new JScrollPane(textArea);
+        scroll.setPreferredSize(new java.awt.Dimension(600, 350));
+        JOptionPane.showMessageDialog(this, scroll, "Reporte de cancelaci\u00f3n", JOptionPane.INFORMATION_MESSAGE);
+
         limpiarBusqueda();
     }
 

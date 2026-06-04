@@ -126,6 +126,13 @@ public class EmpresaTransporte {
         Bus bus = getBusPorPlaca(placaBus);
         if (ruta == null || bus == null) return false;
 
+        // Validar que el mismo bus no tenga otra salida a la misma fecha y hora
+        for (Salida s : mySalidas) {
+            if (s.getMyBus().getPlaca().equals(placaBus) && s.getFecha().equals(fecha)) {
+                return false;
+            }
+        }
+
         String idSalida = generarIdSalida();
         if (salidaExiste(placaBus, codigoRuta, idSalida)) return false;
 
@@ -307,13 +314,13 @@ public class EmpresaTransporte {
     // RF4 — Cancelación de salida
     // ============================================================
 
-    public void cancelarSalida(String idSalida, boolean reembolsar) {
+    public java.util.List<String> cancelarSalida(String idSalida, boolean reembolsar) {
         Salida salida = getSalidaPorId(idSalida);
-        if (salida == null) return;
+        if (salida == null) return new java.util.ArrayList<>();
 
         salida.setEstado(Salida.CANCELADA);
 
-        List<PasajeTicket> ticketsAfectados = new ArrayList<>();
+        java.util.List<PasajeTicket> ticketsAfectados = new java.util.ArrayList<>();
         for (PasajeTicket t : myTickets) {
             if (t.getMySalida().getIdSalida().equals(idSalida) && PasajeTicket.VIGENTE.equals(t.getEstado())) {
                 ticketsAfectados.add(t);
@@ -321,6 +328,8 @@ public class EmpresaTransporte {
         }
 
         Puesto[] puestosSalida = salida.getMyBus().getMyPuestos();
+        java.util.List<String> resultados = new java.util.ArrayList<>();
+        int tktIndex = 1;
 
         for (PasajeTicket ticket : ticketsAfectados) {
             int numPuesto = ticket.getPuesto();
@@ -328,16 +337,35 @@ public class EmpresaTransporte {
                 puestosSalida[numPuesto - 1].setMyPasajero(null);
             }
 
+            StringBuilder r = new StringBuilder();
+            String id = "TKT-" + String.format("%05d", tktIndex++);
+            String pasajero = ticket.getMyPasajero().getCedula().length() > 6
+                ? ticket.getMyPasajero().getCedula().substring(0, 6) + "..."
+                : ticket.getMyPasajero().getCedula();
+
             if (reembolsar) {
                 ticket.setEstado(PasajeTicket.REEMBOLSADO);
                 myCaja.registrarReembolso(ticket.getValorPagar());
+                r.append(id).append("  Pasajero ").append(pasajero)
+                 .append("  Silla ").append(String.format("%02d", ticket.getPuesto()))
+                 .append("  -> REEMBOLSADO");
             } else {
-                reprogramarTicket(ticket);
+                String res = reprogramarTicketConResultado(ticket);
+                r.append(id).append("  Pasajero ").append(pasajero)
+                 .append("  Silla ").append(String.format("%02d", ticket.getPuesto()));
+                if (res != null) {
+                    r.append("  -> ").append(res);
+                } else {
+                    r.append("  -> REEMBOLSADO (sin cupo)");
+                }
             }
+            resultados.add(r.toString());
         }
+
+        return resultados;
     }
 
-    private void reprogramarTicket(PasajeTicket ticket) {
+    private String reprogramarTicketConResultado(PasajeTicket ticket) {
         Salida salidaOriginal = ticket.getMySalida();
         Salida nuevaSalida = buscarSalidaProxima(salidaOriginal);
 
@@ -348,7 +376,7 @@ public class EmpresaTransporte {
                     puestos[i].setMyPasajero(ticket.getMyPasajero());
                     ticket.setMySalida(nuevaSalida);
                     ticket.setPuesto(i + 1);
-                    return;
+                    return "REPROGRAMADO a " + nuevaSalida.getIdSalida() + " Silla " + String.format("%02d", i + 1);
                 }
             }
         }
@@ -356,6 +384,7 @@ public class EmpresaTransporte {
         // Si no se encontró salida válida o no hay cupo: reembolso automático
         ticket.setEstado(PasajeTicket.REEMBOLSADO);
         myCaja.registrarReembolso(ticket.getValorPagar());
+        return null; // señal de reembolso
     }
 
     public Salida buscarSalidaProxima(Salida salidaCancelada) {

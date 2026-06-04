@@ -437,8 +437,12 @@ public class ParametrizacionPanel extends JPanel {
             int min = cal.get(java.util.Calendar.MINUTE);
 
             LocalDateTime fechaHora = LocalDateTime.of(anio, mes, dia, hora, min);
-            empresa.crearSalida(codRuta, placa, fechaHora);
-            JOptionPane.showMessageDialog(panel, "Salida programada exitosamente");
+            boolean ok = empresa.crearSalida(codRuta, placa, fechaHora);
+            if (ok) {
+                JOptionPane.showMessageDialog(panel, "Salida programada exitosamente");
+            } else {
+                JOptionPane.showMessageDialog(panel, "No se pudo crear la salida. Verifique que el bus no est\u00e9 asignado a la misma fecha y hora.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
             actualizarTablaSalidas(empresa.listarSalidas(), model);
         });
 

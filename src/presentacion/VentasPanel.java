@@ -15,6 +15,7 @@ public class VentasPanel extends JPanel {
     private final EmpresaTransporte empresa;
     private final CardLayout subCardLayout;
     private final JPanel subPanel;
+    private static int ticketCounter = 1;
 
     public VentasPanel(EmpresaTransporte empresa) {
         this.empresa = empresa;
@@ -53,7 +54,12 @@ public class VentasPanel extends JPanel {
         tabBar.add(unTicketBtn);
         tabBar.add(idaVueltaBtn);
         add(tabBar, BorderLayout.NORTH);
-        add(subPanel, BorderLayout.CENTER);
+
+        JScrollPane mainScroll = new JScrollPane(subPanel);
+        mainScroll.setBorder(null);
+        mainScroll.getVerticalScrollBar().setUnitIncrement(16);
+        mainScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        add(mainScroll, BorderLayout.CENTER);
     }
 
     private JButton crearTabBtn(String texto, boolean activo) {
@@ -62,7 +68,7 @@ public class VentasPanel extends JPanel {
         btn.setBorder(new LineBorder(Colores.BORDE, 1));
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btn.setPreferredSize(new Dimension(160, 35));
+        btn.setPreferredSize(new Dimension(180, 35));
         if (activo) {
             btn.setBackground(Colores.AZUL_PRIMARIO);
             btn.setForeground(Color.WHITE);
@@ -74,15 +80,16 @@ public class VentasPanel extends JPanel {
     }
 
     // ============================================================
-    // PANEL 1 O MÁS TIQUETES (RF2)
+    // PANEL 1 O MAS TIQUETES (RF2)
     // ============================================================
 
     private JComboBox<String> salidaComboUnTicket;
+    private JComboBox<String> destinoComboUnTicket;
     private JPanel sillasGridUnTicket;
     private JSpinner cantidadSpinner;
     private JPanel pasajerosPanel;
     private List<PasajeroForm> pasajeroForms = new ArrayList<>();
-    private int[] selectedBlock; // puestos consecutivos seleccionados
+    private int[] selectedBlock;
     private String selectedSalidaIdUnTicket;
 
     private JLabel resumenRuta, resumenSalida, resumenBus, resumenPuestos, resumenTotal;
@@ -103,7 +110,11 @@ public class VentasPanel extends JPanel {
 
         JPanel rightPanel = crearPanelResumen();
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, rightPanel);
+        JScrollPane leftScroll = new JScrollPane(leftPanel);
+        leftScroll.setBorder(null);
+        leftScroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, rightPanel);
         split.setDividerLocation(520);
         split.setBorder(null);
         panel.add(split, BorderLayout.CENTER);
@@ -138,25 +149,16 @@ public class VentasPanel extends JPanel {
         gbc.gridx = 0; gbc.gridy = 2;
         panel.add(new JLabel("Destino:"), gbc);
         gbc.gridx = 1;
-        JComboBox<String> destinoCombo = new JComboBox<>();
-        for (Ruta r : empresa.listarRutas()) {
-            destinoCombo.addItem(r.getDestino());
-        }
-        panel.add(destinoCombo, gbc);
+        destinoComboUnTicket = new JComboBox<>();
+        cargarDestinosEnCombo(destinoComboUnTicket);
+        panel.add(destinoComboUnTicket, gbc);
 
         gbc.gridx = 0; gbc.gridy = 3;
-        panel.add(new JLabel("Fecha:"), gbc);
-        gbc.gridx = 1;
-        JSpinner fechaSpinner = new JSpinner(new SpinnerDateModel());
-        fechaSpinner.setEditor(new JSpinner.DateEditor(fechaSpinner, "dd/MM/yyyy"));
-        panel.add(fechaSpinner, gbc);
-
-        gbc.gridx = 0; gbc.gridy = 4;
         panel.add(new JLabel("Salida:"), gbc);
         gbc.gridx = 1;
         salidaComboUnTicket = new JComboBox<>();
         cargarSalidasEnCombo(salidaComboUnTicket, null);
-        destinoCombo.addActionListener(e -> cargarSalidasEnCombo(salidaComboUnTicket, (String) destinoCombo.getSelectedItem()));
+        destinoComboUnTicket.addActionListener(e -> cargarSalidasEnCombo(salidaComboUnTicket, (String) destinoComboUnTicket.getSelectedItem()));
         salidaComboUnTicket.addActionListener(e -> onSalidaUnTicketChanged());
         panel.add(salidaComboUnTicket, gbc);
 
@@ -173,7 +175,6 @@ public class VentasPanel extends JPanel {
 
         JLabel titulo = new JLabel("Paso 2: Seleccionar cantidad y puestos");
         titulo.setFont(new Font("SansSerif", Font.BOLD, 12));
-        panel.add(titulo, BorderLayout.NORTH);
 
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
         top.setOpaque(false);
@@ -181,8 +182,7 @@ public class VentasPanel extends JPanel {
         cantidadSpinner = new JSpinner(new SpinnerNumberModel(1, 1, 40, 1));
         cantidadSpinner.addChangeListener(e -> onCantidadChanged());
         top.add(cantidadSpinner);
-        panel.add(top, BorderLayout.NORTH);
-        // Lo reposicionamos al norte del panel central
+
         JPanel centerWrapper = new JPanel(new BorderLayout());
         centerWrapper.setOpaque(false);
 
@@ -197,10 +197,7 @@ public class VentasPanel extends JPanel {
         leyenda.add(crearLeyenda(Colores.FONDO_SUPERFICIE, "Ocupada"));
         centerWrapper.add(leyenda, BorderLayout.SOUTH);
 
-        panel.add(centerWrapper, BorderLayout.CENTER);
-
-        // Mejorar layout
-        panel.remove(top);
+        panel.add(titulo, BorderLayout.NORTH);
         panel.add(top, BorderLayout.NORTH);
         panel.add(centerWrapper, BorderLayout.CENTER);
 
@@ -356,7 +353,6 @@ public class VentasPanel extends JPanel {
                 }
                 btn.addActionListener(e -> {
                     int cantidad = (Integer) cantidadSpinner.getValue();
-                    // Intentar anclar bloque desde este puesto
                     boolean puede = true;
                     for (int j = 0; j < cantidad; j++) {
                         int idx = numPuesto - 1 + j;
@@ -424,16 +420,14 @@ public class VentasPanel extends JPanel {
             pasajeros[i] = empresa.buscarOCrearPasajero(cedula, nombre, "", correo, telefono);
         }
 
+        Salida salida = empresa.getSalidaPorId(selectedSalidaIdUnTicket);
         PasajeTicket[] tickets = empresa.generarTickets(selectedSalidaIdUnTicket, selectedBlock, pasajeros, false);
         if (tickets != null) {
-            float total = 0f;
-            StringBuilder sb = new StringBuilder("Tiquetes generados exitosamente:\n");
-            for (PasajeTicket t : tickets) {
-                total += t.getValorPagar();
-                sb.append("Puesto ").append(t.getPuesto()).append(" — ").append(t.getMyPasajero().getNombre())
-                  .append(" — $").append(String.format("%,.0f", t.getValorPagar())).append("\n");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < tickets.length; i++) {
+                if (i > 0) sb.append("\n\n");
+                sb.append(formatoTicket(tickets[i], ticketCounter++));
             }
-            sb.append("Total: $").append(String.format("%,.0f", total));
             JOptionPane.showMessageDialog(this, sb.toString());
             limpiarFormularioUnTicket();
         } else {
@@ -449,6 +443,7 @@ public class VentasPanel extends JPanel {
         pasajerosPanel.revalidate();
         pasajerosPanel.repaint();
         cantidadSpinner.setValue(1);
+        if (destinoComboUnTicket.getItemCount() > 0) destinoComboUnTicket.setSelectedIndex(0);
         if (salidaComboUnTicket.getItemCount() > 0) salidaComboUnTicket.setSelectedIndex(0);
         rebuildSeatGridUnTicket();
         actualizarResumenUnTicket();
@@ -502,8 +497,8 @@ public class VentasPanel extends JPanel {
     private String selectedSalidaIdIda, selectedSalidaIdVuelta;
     private JLabel resumenIyVRuta, resumenIyVIda, resumenIyVVuelta, resumenIyVPuestos, resumenIyVTotal, validacionRutaLabel;
 
-    private List<PassengerRoundTripForm> pasajeroFormsIda = new ArrayList<>();
-    private List<PassengerRoundTripForm> pasajeroFormsVuelta = new ArrayList<>();
+    private JPanel pasajerosIyVPanel;
+    private List<PasajeroForm> pasajeroIyVForms = new ArrayList<>();
 
     private JPanel crearPanelIdaVuelta() {
         JPanel panel = new JPanel(new BorderLayout(10, 0));
@@ -521,7 +516,11 @@ public class VentasPanel extends JPanel {
 
         JPanel resumenPanel = crearPanelResumenIyV();
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftPanel, resumenPanel);
+        JScrollPane leftScroll = new JScrollPane(leftPanel);
+        leftScroll.setBorder(null);
+        leftScroll.getVerticalScrollBar().setUnitIncrement(16);
+
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, leftScroll, resumenPanel);
         split.setDividerLocation(520);
         split.setBorder(null);
         panel.add(split, BorderLayout.CENTER);
@@ -574,7 +573,6 @@ public class VentasPanel extends JPanel {
         JPanel panel = new JPanel(new GridLayout(1, 2, 10, 0));
         panel.setOpaque(false);
 
-        // Ida
         JPanel idaPanel = new JPanel(new BorderLayout());
         idaPanel.setBackground(Colores.FONDO_TARJETA);
         idaPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -598,7 +596,6 @@ public class VentasPanel extends JPanel {
         leyIda.add(crearLeyenda(Colores.FONDO_SUPERFICIE, "Ocup."));
         idaPanel.add(leyIda, BorderLayout.SOUTH);
 
-        // Vuelta
         JPanel vueltaPanel = new JPanel(new BorderLayout());
         vueltaPanel.setBackground(Colores.FONDO_TARJETA);
         vueltaPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -635,9 +632,13 @@ public class VentasPanel extends JPanel {
             new LineBorder(Colores.BORDE, 1),
             BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
-        panel.add(new JLabel("Datos de los pasajeros (aplica para ida y vuelta)"), BorderLayout.NORTH);
-        // Para simplificar, asumimos que los pasajeros de ida son los mismos de vuelta y usamos los mismos forms
-        // Mostramos una nota
+        JLabel titulo = new JLabel("Paso 3: Datos de los pasajeros (ida y vuelta)");
+        titulo.setFont(new Font("SansSerif", Font.BOLD, 12));
+        panel.add(titulo, BorderLayout.NORTH);
+        pasajerosIyVPanel = new JPanel();
+        pasajerosIyVPanel.setLayout(new BoxLayout(pasajerosIyVPanel, BoxLayout.Y_AXIS));
+        pasajerosIyVPanel.setOpaque(false);
+        panel.add(new JScrollPane(pasajerosIyVPanel), BorderLayout.CENTER);
         return panel;
     }
 
@@ -736,12 +737,12 @@ public class VentasPanel extends JPanel {
         int[] bloque = empresa.verificarPuestosConsecutivos(salida, cantidad);
         if (bloque != null) {
             selectedBlockIda = bloque;
-            rebuildSeatGridIyV(sillasGridIda, selectedSalidaIdIda, true);
         } else {
             selectedBlockIda = null;
-            rebuildSeatGridIyV(sillasGridIda, selectedSalidaIdIda, true);
             JOptionPane.showMessageDialog(this, "No hay " + cantidad + " puestos consecutivos en la salida de ida.", "Sin cupo", JOptionPane.WARNING_MESSAGE);
         }
+        rebuildSeatGridIyV(sillasGridIda, selectedSalidaIdIda, true);
+        revisarFormulariosIyV();
         actualizarResumenIyV();
     }
 
@@ -753,13 +754,21 @@ public class VentasPanel extends JPanel {
         int[] bloque = empresa.verificarPuestosConsecutivos(salida, cantidad);
         if (bloque != null) {
             selectedBlockVuelta = bloque;
-            rebuildSeatGridIyV(sillasGridVuelta, selectedSalidaIdVuelta, false);
         } else {
             selectedBlockVuelta = null;
-            rebuildSeatGridIyV(sillasGridVuelta, selectedSalidaIdVuelta, false);
             JOptionPane.showMessageDialog(this, "No hay " + cantidad + " puestos consecutivos en la salida de vuelta.", "Sin cupo", JOptionPane.WARNING_MESSAGE);
         }
+        rebuildSeatGridIyV(sillasGridVuelta, selectedSalidaIdVuelta, false);
+        revisarFormulariosIyV();
         actualizarResumenIyV();
+    }
+
+    private void revisarFormulariosIyV() {
+        if (selectedBlockIda != null && selectedBlockVuelta != null
+            && selectedBlockIda.length == selectedBlockVuelta.length
+            && selectedBlockIda.length > 0) {
+            rebuildPasajeroIyVForms(selectedBlockIda.length);
+        }
     }
 
     private void rebuildSeatGridIyV(JPanel grid, String salidaId, boolean esIda) {
@@ -810,6 +819,7 @@ public class VentasPanel extends JPanel {
                         for (int j = 0; j < cantidad; j++) nuevoBloque[j] = numPuesto + j;
                         if (esIda) selectedBlockIda = nuevoBloque; else selectedBlockVuelta = nuevoBloque;
                         rebuildSeatGridIyV(grid, salidaId, esIda);
+                        revisarFormulariosIyV();
                         actualizarResumenIyV();
                     }
                 });
@@ -822,6 +832,20 @@ public class VentasPanel extends JPanel {
         }
         grid.revalidate();
         grid.repaint();
+    }
+
+    private void rebuildPasajeroIyVForms(int cantidad) {
+        pasajerosIyVPanel.removeAll();
+        pasajeroIyVForms.clear();
+        for (int i = 0; i < cantidad; i++) {
+            int puestoIda = selectedBlockIda != null && i < selectedBlockIda.length ? selectedBlockIda[i] : (i + 1);
+            PasajeroForm form = new PasajeroForm(puestoIda, empresa, pasajerosIyVPanel);
+            pasajeroIyVForms.add(form);
+            pasajerosIyVPanel.add(form);
+            pasajerosIyVPanel.add(Box.createVerticalStrut(8));
+        }
+        pasajerosIyVPanel.revalidate();
+        pasajerosIyVPanel.repaint();
     }
 
     private void generarIdaYVuelta() {
@@ -843,37 +867,36 @@ public class VentasPanel extends JPanel {
             return;
         }
 
-        // Solicitar datos de pasajeros mediante un diálogo simple por cada uno
+        // Leer datos de los formularios de pasajeros
         Pasajero[] pasajeros = new Pasajero[cantidad];
         for (int i = 0; i < cantidad; i++) {
-            JPanel form = new JPanel(new GridLayout(0, 2, 5, 5));
-            JTextField cedulaF = new JTextField();
-            JTextField nombreF = new JTextField();
-            JTextField correoF = new JTextField();
-            JTextField telefonoF = new JTextField();
-            form.add(new JLabel("C\u00e9dula:")); form.add(cedulaF);
-            form.add(new JLabel("Nombre:")); form.add(nombreF);
-            form.add(new JLabel("Correo:")); form.add(correoF);
-            form.add(new JLabel("Tel\u00e9fono:")); form.add(telefonoF);
-            int opt = JOptionPane.showConfirmDialog(this, form, "Pasajero puesto " + selectedBlockIda[i] + " (ida) / " + selectedBlockVuelta[i] + " (vuelta)", JOptionPane.OK_CANCEL_OPTION);
-            if (opt != JOptionPane.OK_OPTION) return;
-            if (cedulaF.getText().trim().isEmpty() || nombreF.getText().trim().isEmpty()) {
-                JOptionPane.showMessageDialog(this, "C\u00e9dula y nombre son obligatorios");
+            PasajeroForm form = pasajeroIyVForms.get(i);
+            String cedula = form.cedulaField.getText().trim();
+            String nombre = form.nombreField.getText().trim();
+            String correo = form.correoField.getText().trim();
+            String telefono = form.telefonoField.getText().trim();
+            if (cedula.isEmpty() || nombre.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Complete c\u00e9dula y nombre para el pasajero del puesto " + form.puesto);
                 return;
             }
-            pasajeros[i] = empresa.buscarOCrearPasajero(cedulaF.getText().trim(), nombreF.getText().trim(), "", correoF.getText().trim(), telefonoF.getText().trim());
+            pasajeros[i] = empresa.buscarOCrearPasajero(cedula, nombre, "", correo, telefono);
         }
 
         boolean ok = empresa.ventaIdaYVuelta(selectedSalidaIdIda, selectedBlockIda, pasajeros,
                 selectedSalidaIdVuelta, selectedBlockVuelta, pasajeros);
         if (ok) {
-            float total = 0f;
+            Salida sIda = empresa.getSalidaPorId(selectedSalidaIdIda);
+            Salida sVuelta = empresa.getSalidaPorId(selectedSalidaIdVuelta);
+            StringBuilder sb = new StringBuilder();
             for (int i = 0; i < cantidad; i++) {
-                float base = salidaIda.getMyRuta().getTarifa();
-                if (pasajeros[i].esPreferencial()) base = base * 0.9f;
-                total += base * 2f * 0.9f; // ida+vuelta con 10% descuento total
+                if (i > 0) sb.append("\n\n");
+                sb.append(formatoTicketIdaVuelta(sIda, selectedBlockIda[i], pasajeros[i], ticketCounter++, true));
             }
-            JOptionPane.showMessageDialog(this, "Tiquetes ida y vuelta generados con \u00e9xito.\nTotal: $" + String.format("%,.0f", total));
+            for (int i = 0; i < cantidad; i++) {
+                sb.append("\n\n");
+                sb.append(formatoTicketIdaVuelta(sVuelta, selectedBlockVuelta[i], pasajeros[i], ticketCounter++, false));
+            }
+            JOptionPane.showMessageDialog(this, sb.toString());
             limpiarFormularioIyV();
         } else {
             JOptionPane.showMessageDialog(this, "Error al generar los tiquetes ida y vuelta.", "Error", JOptionPane.ERROR_MESSAGE);
@@ -885,6 +908,10 @@ public class VentasPanel extends JPanel {
         selectedBlockVuelta = null;
         selectedSalidaIdIda = null;
         selectedSalidaIdVuelta = null;
+        pasajeroIyVForms.clear();
+        pasajerosIyVPanel.removeAll();
+        pasajerosIyVPanel.revalidate();
+        pasajerosIyVPanel.repaint();
         cantidadIdaSpinner.setValue(1);
         cantidadVueltaSpinner.setValue(1);
         if (idaCombo.getItemCount() > 0) idaCombo.setSelectedIndex(0);
@@ -919,7 +946,8 @@ public class VentasPanel extends JPanel {
             float total = 0f;
             for (int i = 0; i < selectedBlockIda.length; i++) {
                 float base = salidaIda.getMyRuta().getTarifa();
-                total += base * 2f * 0.9f;
+                float totalAntes = base * 2f;
+                total += totalAntes * 0.9f;
             }
             resumenIyVTotal.setText("Total: $" + String.format("%,.0f", total));
         } else {
@@ -927,6 +955,48 @@ public class VentasPanel extends JPanel {
             resumenIyVTotal.setText("Total: $0");
         }
     }
+
+    // ============================================================
+    // FORMATO DE TICKET
+    // ============================================================
+
+    private String formatoTicket(PasajeTicket t, int ticketNum) {
+        Salida s = t.getMySalida();
+        Bus b = s.getMyBus();
+        String tipoBus = b instanceof BusTipoEjecutivo ? "EJECUTIVO" : "NORMAL";
+        return "VENTA EXITOSA\n" +
+            "Tiquete: TQ-" + String.format("%05d", ticketNum) + "\n" +
+            "Pasajero: " + t.getMyPasajero().getCedula() + " - " + t.getMyPasajero().getNombre() + "\n" +
+            "Salida: " + s.getIdSalida() + " (" + s.getMyRuta().getOrigen() + " -> " + s.getMyRuta().getDestino() + ") " +
+                s.getFecha().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) + "\n" +
+            "Bus: " + b.getPlaca() + " (" + tipoBus + ")  Capacidad: " + b.getCapacidad() + "\n" +
+            "Silla: " + t.getPuesto() + "\n" +
+            "Valor pagado: $" + String.format("%,.0f", t.getValorPagar()) + "\n" +
+            "Estado tiquete: VIGENTE";
+    }
+
+    private String formatoTicketIdaVuelta(Salida s, int puesto, Pasajero p, int ticketNum, boolean esIda) {
+        Bus b = s.getMyBus();
+        String tipoBus = b instanceof BusTipoEjecutivo ? "EJECUTIVO" : "NORMAL";
+        String tipoTicket = esIda ? "IDA" : "VUELTA";
+        float valor = s.getMyRuta().getTarifa();
+        if (p.esPreferencial()) valor = valor * 0.9f;
+        valor = valor * 0.9f; // descuento 10% ida y vuelta
+
+        return "VENTA EXITOSA — " + tipoTicket + "\n" +
+            "Tiquete: TQ-" + String.format("%05d", ticketNum) + "\n" +
+            "Pasajero: " + p.getCedula() + " - " + p.getNombre() + "\n" +
+            "Salida: " + s.getIdSalida() + " (" + s.getMyRuta().getOrigen() + " -> " + s.getMyRuta().getDestino() + ") " +
+                s.getFecha().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) + "\n" +
+            "Bus: " + b.getPlaca() + " (" + tipoBus + ")  Capacidad: " + b.getCapacidad() + "\n" +
+            "Silla: " + puesto + "\n" +
+            "Valor pagado: $" + String.format("%,.0f", valor) + "\n" +
+            "Estado tiquete: VIGENTE";
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
 
     private JPanel crearLeyenda(Color color, String texto) {
         JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 0));
@@ -944,15 +1014,25 @@ public class VentasPanel extends JPanel {
     }
 
     public void refreshData() {
-        cargarSalidasEnCombo(salidaComboUnTicket, null);
+        cargarDestinosEnCombo(destinoComboUnTicket);
+        cargarSalidasEnCombo(salidaComboUnTicket, (String) destinoComboUnTicket.getSelectedItem());
         cargarSalidasEnCombo(idaCombo, null);
         cargarSalidasEnCombo(vueltaCombo, null);
         limpiarFormularioUnTicket();
         limpiarFormularioIyV();
     }
 
+    private void cargarDestinosEnCombo(JComboBox<String> combo) {
+        String selected = (String) combo.getSelectedItem();
+        combo.removeAllItems();
+        for (Ruta r : empresa.listarRutas()) {
+            combo.addItem(r.getDestino());
+        }
+        if (selected != null) combo.setSelectedItem(selected);
+    }
+
     // ============================================================
-    // FORMULARIO DINÁMICO DE PASAJERO
+    // FORMULARIO DINAMICO DE PASAJERO
     // ============================================================
 
     private static class PasajeroForm extends JPanel {
@@ -1032,7 +1112,4 @@ public class VentasPanel extends JPanel {
             });
         }
     }
-
-    // Helper vacío para compatibilidad de estructura ida/vuelta (no se usa en la UI actual)
-    private static class PassengerRoundTripForm {}
 }

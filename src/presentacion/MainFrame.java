@@ -16,7 +16,7 @@ public class MainFrame extends JFrame {
     public MainFrame(EmpresaTransporte empresa, String usuario) {
         this.empresa = empresa;
         setTitle("Copetran — Sistema de gesti\u00f3n");
-        setSize(900, 650);
+        setSize(1100, 750);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 

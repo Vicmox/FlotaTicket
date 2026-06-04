@@ -1,7 +1,5 @@
 package presentacion;
 
-import negocio.*;
-import javax.swing.*;
 import javax.swing.border.LineBorder;
 import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
@@ -9,6 +7,20 @@ import java.awt.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import negocio.Bus;
+import negocio.CajaVenta;
+import negocio.EmpresaTransporte;
+import negocio.PasajeTicket;
+import negocio.Ruta;
+import negocio.Salida;
 
 public class DashboardPanel extends JPanel {
 
@@ -155,7 +167,11 @@ public class DashboardPanel extends JPanel {
 
     public void actualizarDatos() {
         CajaVenta caja = empresa.getCajaVenta();
-        vendidosLabel.setText(String.valueOf((int)caja.getTotalVendido()));
+        int totalTiquetes = 0;
+        for (PasajeTicket t : empresa.getMyTickets()) {
+            if (PasajeTicket.VIGENTE.equals(t.getEstado())) totalTiquetes++;
+        }
+        vendidosLabel.setText(String.valueOf(totalTiquetes));
         ingresoLabel.setText(String.format("$%,.0f", caja.getIngresoNeto()));
         reembolsosLabel.setText(String.valueOf((int)caja.getTotalReembolsado()));
 

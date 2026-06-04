@@ -12,6 +12,9 @@ public class ReportesPanel extends JPanel {
 
     private final EmpresaTransporte empresa;
 
+    private JLabel totalesMontoCaja, totalesVendido, totalesReembolsado, totalesIngresoNeto;
+    private JPanel totalesMetricasPanel;
+
     public ReportesPanel(EmpresaTransporte empresa) {
         this.empresa = empresa;
         setLayout(new BorderLayout());
@@ -21,8 +24,15 @@ public class ReportesPanel extends JPanel {
         JTabbedPane tabs = new JTabbedPane();
         tabs.setFont(new Font("SansSerif", Font.PLAIN, 13));
         tabs.addTab("Ventas por ruta", crearPanelVentasPorRuta());
-        tabs.addTab("Totales del d\u00eda", crearPanelTotalesDia());
+        JPanel totalesPanel = crearPanelTotalesDia();
+        tabs.addTab("Totales del d\u00eda", totalesPanel);
         tabs.addTab("Ventas por mes / rango", crearPanelVentasRango());
+
+        tabs.addChangeListener(e -> {
+            if (tabs.getSelectedIndex() == 1) {
+                actualizarTotalesDia();
+            }
+        });
 
         add(tabs, BorderLayout.CENTER);
     }
@@ -81,6 +91,10 @@ public class ReportesPanel extends JPanel {
         metricas.add(crearTarjetaSimple("Ingreso neto", ingresoNeto, Colores.TEXTO_PRIMARIO));
         metricas.add(crearTarjetaSimple("Ocupaci\u00f3n promedio", ocupacion, Colores.ESTADO_AZUL_TX));
 
+        DefaultTableModel model = new DefaultTableModel(new String[]{"Ruta", "Tiquetes", "Reembolsos", "Total neto", "Ocupaci\u00f3n %"}, 0) {
+            @Override public boolean isCellEditable(int row, int col) { return false; }
+        };
+
         generarBtn.addActionListener(e -> {
             CajaVenta caja = empresa.getCajaVenta();
             totalVendido.setText(String.format("$%,.0f", caja.getTotalVendido()));
@@ -88,13 +102,43 @@ public class ReportesPanel extends JPanel {
             ingresoNeto.setText(String.format("$%,.0f", caja.getIngresoNeto()));
             int totalCap = 0;
             for (Bus b : empresa.listarBuses()) totalCap += b.getCapacidad();
-            int totalVend = (int)caja.getTotalVendido();
+            int totalVend = 0;
+            for (PasajeTicket t : empresa.getMyTickets()) {
+                if (PasajeTicket.VIGENTE.equals(t.getEstado())) totalVend++;
+            }
             ocupacion.setText(totalCap > 0 ? String.format("%.0f%%", totalVend * 100.0 / totalCap) : "0%");
-        });
 
-        DefaultTableModel model = new DefaultTableModel(new String[]{"Ruta", "Tiquetes", "Reembolsos", "Total neto", "Ocupaci\u00f3n %"}, 0) {
-            @Override public boolean isCellEditable(int row, int col) { return false; }
-        };
+            // Llenar tabla por ruta
+            model.setRowCount(0);
+            java.util.Map<String, int[]> stats = new java.util.LinkedHashMap<>();
+            java.util.Map<String, Float> totalsRuta = new java.util.LinkedHashMap<>();
+            for (Ruta r : empresa.listarRutas()) {
+                stats.put(r.getCodigo(), new int[]{0, 0});
+                totalsRuta.put(r.getCodigo(), 0f);
+            }
+            for (PasajeTicket t : empresa.getMyTickets()) {
+                String cod = t.getMySalida().getMyRuta().getCodigo();
+                int[] s = stats.get(cod);
+                if (s != null) {
+                    if (PasajeTicket.VIGENTE.equals(t.getEstado())) {
+                        s[0]++;
+                        totalsRuta.merge(cod, t.getValorPagar(), Float::sum);
+                    }
+                    if (PasajeTicket.REEMBOLSADO.equals(t.getEstado())) s[1]++;
+                }
+            }
+            for (java.util.Map.Entry<String, int[]> entry : stats.entrySet()) {
+                int vend = entry.getValue()[0];
+                int reemb = entry.getValue()[1];
+                int cap = 0;
+                for (Salida sal : empresa.listarSalidas()) {
+                    if (sal.getMyRuta().getCodigo().equals(entry.getKey())) cap += sal.getMyBus().getCapacidad();
+                }
+                String pct = cap > 0 ? String.format("%.0f%%", vend * 100.0 / cap) : "0%";
+                float total = totalsRuta.getOrDefault(entry.getKey(), 0f);
+                model.addRow(new Object[]{entry.getKey(), vend, reemb, "$" + String.format("%,.0f", total), pct});
+            }
+        });
         JTable table = new JTable(model);
         table.setRowHeight(28);
 
@@ -123,17 +167,22 @@ public class ReportesPanel extends JPanel {
         panel.setBackground(Colores.FONDO_GENERAL);
         panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
-        JPanel metricas = new JPanel(new GridLayout(1, 4, 15, 0));
-        metricas.setOpaque(false);
+        totalesMetricasPanel = new JPanel(new GridLayout(1, 4, 15, 0));
+        totalesMetricasPanel.setOpaque(false);
 
-        CajaVenta caja = empresa.getCajaVenta();
+        totalesMontoCaja = new JLabel();
+        totalesVendido = new JLabel();
+        totalesReembolsado = new JLabel();
+        totalesIngresoNeto = new JLabel();
 
-        metricas.add(crearTarjetaGrande("Monto en caja", String.format("$%,.0f", caja.getMontoCaja()), Colores.AZUL_CLARO, Colores.AZUL_PRIMARIO));
-        metricas.add(crearTarjetaGrande("Total vendido", String.format("$%,.0f", caja.getTotalVendido()), Colores.ESTADO_VERDE, Colores.ESTADO_VERDE_TX));
-        metricas.add(crearTarjetaGrande("Reembolsado", String.format("$%,.0f", caja.getTotalReembolsado()), Colores.ESTADO_ROJO, Colores.ESTADO_ROJO_TX));
-        metricas.add(crearTarjetaGrande("Ingreso neto", String.format("$%,.0f", caja.getIngresoNeto()), new Color(200,230,200), new Color(30,100,30)));
+        totalesMetricasPanel.add(crearTarjetaGrande("Monto en caja", "", Colores.AZUL_CLARO, Colores.AZUL_PRIMARIO, totalesMontoCaja));
+        totalesMetricasPanel.add(crearTarjetaGrande("Total vendido", "", Colores.ESTADO_VERDE, Colores.ESTADO_VERDE_TX, totalesVendido));
+        totalesMetricasPanel.add(crearTarjetaGrande("Reembolsado", "", Colores.ESTADO_ROJO, Colores.ESTADO_ROJO_TX, totalesReembolsado));
+        totalesMetricasPanel.add(crearTarjetaGrande("Ingreso neto", "", new Color(200,230,200), new Color(30,100,30), totalesIngresoNeto));
 
-        panel.add(metricas, BorderLayout.CENTER);
+        actualizarTotalesDia();
+
+        panel.add(totalesMetricasPanel, BorderLayout.CENTER);
 
         JLabel fechaReporte = new JLabel("Reporte generado: " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
         fechaReporte.setFont(new Font("SansSerif", Font.PLAIN, 11));
@@ -143,6 +192,14 @@ public class ReportesPanel extends JPanel {
         panel.add(fechaReporte, BorderLayout.SOUTH);
 
         return panel;
+    }
+
+    private void actualizarTotalesDia() {
+        CajaVenta caja = empresa.getCajaVenta();
+        if (totalesMontoCaja != null) totalesMontoCaja.setText(String.format("$%,.0f", caja.getMontoCaja()));
+        if (totalesVendido != null) totalesVendido.setText(String.format("$%,.0f", caja.getTotalVendido()));
+        if (totalesReembolsado != null) totalesReembolsado.setText(String.format("$%,.0f", caja.getTotalReembolsado()));
+        if (totalesIngresoNeto != null) totalesIngresoNeto.setText(String.format("$%,.0f", caja.getIngresoNeto()));
     }
 
     // ============================================================
@@ -238,6 +295,25 @@ public class ReportesPanel extends JPanel {
         valorLabel.setForeground(txColor);
         card.add(tituloLabel, BorderLayout.NORTH);
         card.add(valorLabel, BorderLayout.CENTER);
+        return card;
+    }
+
+    private JPanel crearTarjetaGrande(String titulo, String valorInicial, Color bgColor, Color txColor, JLabel outLabel) {
+        JPanel card = new JPanel(new BorderLayout());
+        card.setBackground(bgColor);
+        card.setBorder(BorderFactory.createCompoundBorder(
+            new LineBorder(Colores.BORDE, 1),
+            BorderFactory.createEmptyBorder(25, 20, 25, 20)
+        ));
+        JLabel tituloLabel = new JLabel(titulo, SwingConstants.CENTER);
+        tituloLabel.setFont(new Font("SansSerif", Font.PLAIN, 14));
+        tituloLabel.setForeground(txColor);
+        outLabel.setText(valorInicial);
+        outLabel.setFont(new Font("SansSerif", Font.BOLD, 24));
+        outLabel.setForeground(txColor);
+        outLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        card.add(tituloLabel, BorderLayout.NORTH);
+        card.add(outLabel, BorderLayout.CENTER);
         return card;
     }
 }
