@@ -29,7 +29,7 @@ public class EmpresaTransporte {
         this.myPasajeros = new ArrayList<>();
         this.myCaja = new CajaVenta();
         this.secuencialSalida = 1;
-        this.secuencialRuta = 5;
+        this.secuencialRuta = 9;
         cargarDatosBase();
     }
 
@@ -77,6 +77,19 @@ public class EmpresaTransporte {
         Bus bus = getBusPorPlaca(placa);
         if (bus == null) return false;
         myBuses.remove(bus);
+        return true;
+    }
+
+    public boolean asignarConductorABus(String placa, String cedulaConductor) {
+        Bus bus = getBusPorPlaca(placa);
+        if (bus == null) return false;
+        if (cedulaConductor == null || cedulaConductor.isEmpty()) {
+            bus.setMyConductor(null);
+            return true;
+        }
+        Conductor c = getConductorPorCedula(cedulaConductor);
+        if (c == null) return false;
+        bus.setMyConductor(c);
         return true;
     }
 
@@ -148,6 +161,12 @@ public class EmpresaTransporte {
     public boolean editarSalida(String idSalida, String nuevoEstado) {
         Salida salida = getSalidaPorId(idSalida);
         if (salida == null) return false;
+        // Validar mínimo 5 tiquetes VIGENTES para activar la salida (EN_RUTA)
+        if (Salida.EN_RUTA.equals(nuevoEstado)) {
+            if (!salida.esSalidaEfectiva(myTickets)) {
+                return false;
+            }
+        }
         salida.setEstado(nuevoEstado);
         return true;
     }
@@ -200,7 +219,7 @@ public class EmpresaTransporte {
     }
 
     public int[] verificarPuestosConsecutivos(Salida salida, int cantidad) {
-        Puesto[] puestos = salida.getMyBus().getMyPuestos();
+        Puesto[] puestos = salida.getMyPuestos();
         for (int i = 0; i <= puestos.length - cantidad; i++) {
             boolean bloqueLibre = true;
             for (int j = 0; j < cantidad; j++) {
@@ -225,7 +244,7 @@ public class EmpresaTransporte {
         if (salida == null) return false;
         if (!Salida.PROGRAMADA.equals(salida.getEstado())) return false;
 
-        Puesto[] puestos = salida.getMyBus().getMyPuestos();
+        Puesto[] puestos = salida.getMyPuestos();
         for (int num : numerosPuestos) {
             if (num < 1 || num > puestos.length) return false;
             if (!puestos[num - 1].estaLibre()) return false;
@@ -278,7 +297,9 @@ public class EmpresaTransporte {
         Salida salidaVuelta = getSalidaPorId(idSalidaVuelta);
 
         if (salidaIda == null || salidaVuelta == null) return false;
-        if (!salidaIda.getMyRuta().getCodigo().equals(salidaVuelta.getMyRuta().getCodigo())) return false;
+        // Validar ruta inversa: ida.origen == vuelta.destino && ida.destino == vuelta.origen
+        if (!salidaIda.getMyRuta().getOrigen().equals(salidaVuelta.getMyRuta().getDestino())
+            || !salidaIda.getMyRuta().getDestino().equals(salidaVuelta.getMyRuta().getOrigen())) return false;
         if (!Salida.PROGRAMADA.equals(salidaIda.getEstado()) || !Salida.PROGRAMADA.equals(salidaVuelta.getEstado())) return false;
 
         // Verificar consecutividad y disponibilidad en ambas salidas
@@ -292,11 +313,8 @@ public class EmpresaTransporte {
         // Generar tickets vuelta (sin tocar caja aún)
         PasajeTicket[] ticketsVuelta = crearTicketsInterno(idSalidaVuelta, puestosVuelta, pasajerosVuelta, true);
         if (ticketsVuelta == null) {
-            // Rollback ida: liberar puestos y marcar como reembolsado
-            for (PasajeTicket t : ticketsIda) {
-                t.setEstado(PasajeTicket.REEMBOLSADO);
-                t.getMySalida().getMyBus().getMyPuestos()[t.getPuesto() - 1].setMyPasajero(null);
-            }
+            // No hacer rollback: los tickets de ida quedan vigentes
+            // El usuario puede usarlos individualmente o cancelarlos
             return false;
         }
 
@@ -327,7 +345,7 @@ public class EmpresaTransporte {
             }
         }
 
-        Puesto[] puestosSalida = salida.getMyBus().getMyPuestos();
+        Puesto[] puestosSalida = salida.getMyPuestos();
         java.util.List<String> resultados = new java.util.ArrayList<>();
         int tktIndex = 1;
 
@@ -370,7 +388,7 @@ public class EmpresaTransporte {
         Salida nuevaSalida = buscarSalidaProxima(salidaOriginal);
 
         if (nuevaSalida != null) {
-            Puesto[] puestos = nuevaSalida.getMyBus().getMyPuestos();
+            Puesto[] puestos = nuevaSalida.getMyPuestos();
             for (int i = 0; i < puestos.length; i++) {
                 if (puestos[i].estaLibre()) {
                     puestos[i].setMyPasajero(ticket.getMyPasajero());
@@ -389,37 +407,15 @@ public class EmpresaTransporte {
 
     public Salida buscarSalidaProxima(Salida salidaCancelada) {
         String codigoRuta = salidaCancelada.getMyRuta().getCodigo();
-        LocalDateTime fechaCancelada = salidaCancelada.getFecha();
-        LocalDate fechaCanceladaDia = fechaCancelada.toLocalDate();
+        LocalDateTime fechaRef = salidaCancelada.getFecha();
 
-        // Prioridad 1: mismo día, hora posterior
         Salida candidata = null;
         for (Salida s : mySalidas) {
             if (s.getMyRuta().getCodigo().equals(codigoRuta)
                 && Salida.PROGRAMADA.equals(s.getEstado())
-                && s.getFecha().toLocalDate().equals(fechaCanceladaDia)
-                && s.getFecha().isAfter(fechaCancelada)) {
+                && s.getFecha().isAfter(fechaRef)) {
 
-                for (Puesto p : s.getMyBus().getMyPuestos()) {
-                    if (p.estaLibre()) {
-                        if (candidata == null || s.getFecha().isBefore(candidata.getFecha())) {
-                            candidata = s;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-        if (candidata != null) return candidata;
-
-        // Prioridad 2: día siguiente (máximo 1 día después)
-        LocalDate diaSiguiente = fechaCanceladaDia.plusDays(1);
-        for (Salida s : mySalidas) {
-            if (s.getMyRuta().getCodigo().equals(codigoRuta)
-                && Salida.PROGRAMADA.equals(s.getEstado())
-                && s.getFecha().toLocalDate().equals(diaSiguiente)) {
-
-                for (Puesto p : s.getMyBus().getMyPuestos()) {
+                for (Puesto p : s.getMyPuestos()) {
                     if (p.estaLibre()) {
                         if (candidata == null || s.getFecha().isBefore(candidata.getFecha())) {
                             candidata = s;
@@ -555,6 +551,11 @@ public class EmpresaTransporte {
         myRutas.add(new Ruta("R02", "Cúcuta", "Bogotá", 160000f));
         myRutas.add(new Ruta("R03", "Cúcuta", "Medellín", 180000f));
         myRutas.add(new Ruta("R04", "Cúcuta", "Cartagena", 220000f));
+        // Rutas de retorno (inversas)
+        myRutas.add(new Ruta("R05", "Bucaramanga", "Cúcuta", 80000f));
+        myRutas.add(new Ruta("R06", "Bogotá", "Cúcuta", 160000f));
+        myRutas.add(new Ruta("R07", "Medellín", "Cúcuta", 180000f));
+        myRutas.add(new Ruta("R08", "Cartagena", "Cúcuta", 220000f));
 
         myBuses.add(new BusTipoNormal("KAA-101", "DISPONIBLE", 40));
         myBuses.add(new BusTipoEjecutivo("KBB-202", "DISPONIBLE", 30));
@@ -571,5 +572,17 @@ public class EmpresaTransporte {
         mySalidas.add(new Salida("S006", getRutaPorCodigo("R03"), parseFecha("17/03/2026 18:00"), getBusPorPlaca("KAA-101"), "PROGRAMADA"));
         mySalidas.add(new Salida("S007", getRutaPorCodigo("R04"), parseFecha("18/03/2026 06:30"), getBusPorPlaca("KCC-303"), "PROGRAMADA"));
         mySalidas.add(new Salida("S008", getRutaPorCodigo("R04"), parseFecha("18/03/2026 19:30"), getBusPorPlaca("KBB-202"), "PROGRAMADA"));
+        // Salidas de retorno
+        mySalidas.add(new Salida("S009", getRutaPorCodigo("R05"), parseFecha("16/03/2026 08:00"), getBusPorPlaca("KCC-303"), "PROGRAMADA"));
+        mySalidas.add(new Salida("S010", getRutaPorCodigo("R05"), parseFecha("16/03/2026 16:00"), getBusPorPlaca("KBB-202"), "PROGRAMADA"));
+        mySalidas.add(new Salida("S011", getRutaPorCodigo("R06"), parseFecha("17/03/2026 09:00"), getBusPorPlaca("KDD-404"), "PROGRAMADA"));
+        mySalidas.add(new Salida("S012", getRutaPorCodigo("R06"), parseFecha("17/03/2026 22:00"), getBusPorPlaca("KAA-101"), "PROGRAMADA"));
+        mySalidas.add(new Salida("S013", getRutaPorCodigo("R07"), parseFecha("18/03/2026 07:30"), getBusPorPlaca("KFF-606"), "PROGRAMADA"));
+        mySalidas.add(new Salida("S014", getRutaPorCodigo("R08"), parseFecha("19/03/2026 08:00"), getBusPorPlaca("KDD-404"), "PROGRAMADA"));
+
+        // Conductores base
+        myConductores.add(new Conductor("1001", "Juan P\u00e9rez", "Calle 10 #5-20", "juan@copetran.com", "3001112233", 2500000f));
+        myConductores.add(new Conductor("1002", "Carlos G\u00f3mez", "Av. 3 #12-45", "carlos@copetran.com", "3102223344", 2300000f));
+        myConductores.add(new Conductor("1003", "Andr\u00e9s L\u00f3pez", "Cra. 7 #8-15", "andres@copetran.com", "3203334455", 2400000f));
     }
 }

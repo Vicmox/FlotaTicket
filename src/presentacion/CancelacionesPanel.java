@@ -16,6 +16,7 @@ public class CancelacionesPanel extends JPanel {
     private final JLabel fechaLabel;
     private final JLabel busLabel;
     private final JLabel ticketsLabel;
+    private final JLabel estadoLabel;
     private final DefaultTableModel ticketsModel;
     private final JPanel alertaPanel;
     private final JRadioButton reprogramarRadio;
@@ -52,6 +53,7 @@ public class CancelacionesPanel extends JPanel {
 
         add(buscarPanel, BorderLayout.NORTH);
 
+        // Panel de alerta
         alertaPanel = new JPanel();
         alertaPanel.setBackground(Colores.ESTADO_ROJO);
         alertaPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -60,7 +62,6 @@ public class CancelacionesPanel extends JPanel {
         ));
         alertaPanel.setLayout(new BoxLayout(alertaPanel, BoxLayout.Y_AXIS));
         alertaPanel.setVisible(false);
-
         JLabel alertaTitulo = new JLabel("Salida encontrada");
         alertaTitulo.setFont(new Font("SansSerif", Font.BOLD, 13));
         alertaTitulo.setForeground(Colores.ESTADO_ROJO_TX);
@@ -70,8 +71,7 @@ public class CancelacionesPanel extends JPanel {
         alertaMsg.setForeground(Colores.ESTADO_ROJO_TX);
         alertaPanel.add(alertaMsg);
 
-        add(alertaPanel, BorderLayout.CENTER);
-
+        // Panel central con datos y tabla
         JPanel centralPanel = new JPanel(new GridLayout(1, 2, 10, 0));
         centralPanel.setOpaque(false);
 
@@ -88,7 +88,6 @@ public class CancelacionesPanel extends JPanel {
         rutaLabel = new JLabel("Ruta: —");
         fechaLabel = new JLabel("Fecha y hora: —");
         busLabel = new JLabel("Bus asignado: —");
-        ticketsLabel = new JLabel("Tiquetes VIGENTES: 0");
 
         datosPanel.add(rutaLabel);
         datosPanel.add(Box.createVerticalStrut(4));
@@ -96,7 +95,12 @@ public class CancelacionesPanel extends JPanel {
         datosPanel.add(Box.createVerticalStrut(4));
         datosPanel.add(busLabel);
         datosPanel.add(Box.createVerticalStrut(4));
+        ticketsLabel = new JLabel("Tiquetes VIGENTES: 0");
         datosPanel.add(ticketsLabel);
+        datosPanel.add(Box.createVerticalStrut(4));
+        estadoLabel = new JLabel("Estado: —");
+        estadoLabel.setFont(new Font("SansSerif", Font.BOLD, 12));
+        datosPanel.add(estadoLabel);
 
         ticketsModel = new DefaultTableModel(new String[]{"Tiquete", "Pasajero", "Silla", "Estado"}, 0) {
             @Override public boolean isCellEditable(int row, int col) { return false; }
@@ -116,13 +120,22 @@ public class CancelacionesPanel extends JPanel {
         centralPanel.add(datosPanel);
         centralPanel.add(ticketsContainer);
 
-        add(centralPanel, BorderLayout.CENTER);
+        // Contenedor central con alerta arriba y paneles abajo
+        JPanel centerContainer = new JPanel(new BorderLayout());
+        centerContainer.setOpaque(false);
+        centerContainer.add(alertaPanel, BorderLayout.NORTH);
+        centerContainer.add(centralPanel, BorderLayout.CENTER);
+        add(centerContainer, BorderLayout.CENTER);
 
-        JPanel accionesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 8));
+        // Acciones
+        JPanel accionesPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 12));
         accionesPanel.setBackground(Colores.FONDO_SUPERFICIE);
-        accionesPanel.setBorder(new LineBorder(Colores.BORDE, 1));
+        accionesPanel.setBorder(BorderFactory.createCompoundBorder(
+            new LineBorder(Colores.BORDE, 1),
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
 
-        reprogramarRadio = new JRadioButton("Reprogramar autom\u00e1ticamente (mismo d\u00eda hora posterior o m\u00e1ximo 1 d\u00eda despu\u00e9s)");
+        reprogramarRadio = new JRadioButton("Reprogramar autom\u00e1ticamente (pr\u00f3xima salida despu\u00e9s de hoy)");
         reprogramarRadio.setFont(new Font("SansSerif", Font.PLAIN, 12));
         reprogramarRadio.setOpaque(false);
         reembolsarRadio = new JRadioButton("Marcar como REEMBOLSADO");
@@ -137,11 +150,10 @@ public class CancelacionesPanel extends JPanel {
         accionesPanel.add(reembolsarRadio);
 
         JButton cancelarBtn = new JButton("Cancelar");
-        JButton confirmarBtn = new JButton("Confirmar cancelaci\u00f3n y generar reporte");
+        confirmarBtn = new JButton("Confirmar cancelaci\u00f3n y generar reporte");
         confirmarBtn.setBackground(Colores.ESTADO_ROJO_TX);
         confirmarBtn.setForeground(Color.WHITE);
         confirmarBtn.setFocusPainted(false);
-        this.confirmarBtn = confirmarBtn;
 
         accionesPanel.add(cancelarBtn);
         accionesPanel.add(confirmarBtn);
@@ -169,6 +181,14 @@ public class CancelacionesPanel extends JPanel {
         rutaLabel.setText("Ruta: " + salidaEncontrada.getMyRuta().getCodigo() + " — " + salidaEncontrada.getMyRuta().getOrigen() + " \u2192 " + salidaEncontrada.getMyRuta().getDestino());
         fechaLabel.setText("Fecha y hora: " + salidaEncontrada.getFecha().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
         busLabel.setText("Bus asignado: " + salidaEncontrada.getMyBus().getPlaca());
+        String estado = salidaEncontrada.getEstado();
+        if (Salida.PROGRAMADA.equals(estado) || Salida.EN_RUTA.equals(estado)) {
+            estadoLabel.setText("Estado: " + estado + " (ACTIVA)");
+            estadoLabel.setForeground(Colores.ESTADO_VERDE_TX);
+        } else {
+            estadoLabel.setText("Estado: " + estado + " (NO VIGENTE)");
+            estadoLabel.setForeground(Colores.ESTADO_ROJO_TX);
+        }
 
         ticketsModel.setRowCount(0);
         int vigentes = 0;
@@ -214,7 +234,7 @@ public class CancelacionesPanel extends JPanel {
         textArea.setEditable(false);
         textArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
         JScrollPane scroll = new JScrollPane(textArea);
-        scroll.setPreferredSize(new java.awt.Dimension(600, 350));
+        scroll.setPreferredSize(new Dimension(600, 350));
         JOptionPane.showMessageDialog(this, scroll, "Reporte de cancelaci\u00f3n", JOptionPane.INFORMATION_MESSAGE);
 
         limpiarBusqueda();
@@ -228,6 +248,8 @@ public class CancelacionesPanel extends JPanel {
         busLabel.setText("Bus asignado: —");
         ticketsLabel.setText("Tiquetes VIGENTES: 0");
         ticketsModel.setRowCount(0);
+        estadoLabel.setText("Estado: —");
+        estadoLabel.setForeground(Color.BLACK);
         salidaEncontrada = null;
     }
 }

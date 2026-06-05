@@ -8,6 +8,7 @@ public abstract class Bus {
     protected String placa;
     protected String estado;
     protected Puesto[] myPuestos;
+    protected Conductor myConductor;
 
     public Bus(String placa, String estado, int capacidad) {
         this.placa = placa;
@@ -39,6 +40,9 @@ public abstract class Bus {
     public int getCapacidad() {
         return myPuestos.length;
     }
+
+    public Conductor getMyConductor() { return myConductor; }
+    public void setMyConductor(Conductor myConductor) { this.myConductor = myConductor; }
 
     public abstract int[] mostrarPuestosLibres();
 }

@@ -31,6 +31,7 @@ public class DashboardPanel extends JPanel {
     private final JLabel busesLabel;
     private final DefaultTableModel ocupacionModel;
     private final DefaultTableModel salidasModel;
+    private java.util.function.Consumer<String> navListener;
 
     public DashboardPanel(EmpresaTransporte empresa) {
         this.empresa = empresa;
@@ -96,10 +97,10 @@ public class DashboardPanel extends JPanel {
         quickAccess.setOpaque(false);
         quickAccess.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
 
-        quickAccess.add(crearBotonAcceso("Nueva venta"));
-        quickAccess.add(crearBotonAcceso("Ida y vuelta"));
-        quickAccess.add(crearBotonAcceso("Cancelar salida"));
-        quickAccess.add(crearBotonAcceso("Ver reportes"));
+        quickAccess.add(crearBotonAcceso("Nueva venta", "ventas"));
+        quickAccess.add(crearBotonAcceso("Ida y vuelta", "ventas"));
+        quickAccess.add(crearBotonAcceso("Cancelar salida", "cancelaciones"));
+        quickAccess.add(crearBotonAcceso("Ver reportes", "reportes"));
 
         add(quickAccess, BorderLayout.SOUTH);
 
@@ -154,7 +155,7 @@ public class DashboardPanel extends JPanel {
         return panel;
     }
 
-    private JButton crearBotonAcceso(String texto) {
+    private JButton crearBotonAcceso(String texto, String navKey) {
         JButton btn = new JButton(texto);
         btn.setBackground(Colores.FONDO_SUPERFICIE);
         btn.setForeground(Colores.TEXTO_PRIMARIO);
@@ -162,7 +163,14 @@ public class DashboardPanel extends JPanel {
         btn.setBorder(new LineBorder(Colores.BORDE, 1));
         btn.setFocusPainted(false);
         btn.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btn.addActionListener(e -> {
+            if (navListener != null) navListener.accept(navKey);
+        });
         return btn;
+    }
+
+    public void setNavegacionListener(java.util.function.Consumer<String> listener) {
+        this.navListener = listener;
     }
 
     public void actualizarDatos() {
@@ -173,7 +181,7 @@ public class DashboardPanel extends JPanel {
         }
         vendidosLabel.setText(String.valueOf(totalTiquetes));
         ingresoLabel.setText(String.format("$%,.0f", caja.getIngresoNeto()));
-        reembolsosLabel.setText(String.valueOf((int)caja.getTotalReembolsado()));
+        reembolsosLabel.setText(String.format("$%,.0f", caja.getTotalReembolsado()));
 
         int activos = 0;
         for (Bus b : empresa.listarBuses()) {

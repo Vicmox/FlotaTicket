@@ -15,6 +15,7 @@ public class Salida {
     private LocalDateTime fecha;
     private Bus myBus;
     private String estado;
+    private Puesto[] myPuestos;
 
     public Salida(String idSalida, Ruta myRuta, LocalDateTime fecha, Bus myBus, String estado) {
         this.idSalida = idSalida;
@@ -22,6 +23,15 @@ public class Salida {
         this.fecha = fecha;
         this.myBus = myBus;
         this.estado = estado;
+        copiarPuestos(myBus);
+    }
+
+    private void copiarPuestos(Bus bus) {
+        Puesto[] original = bus.getMyPuestos();
+        this.myPuestos = new Puesto[original.length];
+        for (int i = 0; i < original.length; i++) {
+            this.myPuestos[i] = new Puesto(original[i].getFila(), original[i].getNumero());
+        }
     }
 
     public String getIdSalida() { return idSalida; }
@@ -34,10 +44,15 @@ public class Salida {
     public void setFecha(LocalDateTime fecha) { this.fecha = fecha; }
 
     public Bus getMyBus() { return myBus; }
-    public void setMyBus(Bus myBus) { this.myBus = myBus; }
+    public void setMyBus(Bus myBus) {
+        this.myBus = myBus;
+        copiarPuestos(myBus);
+    }
 
     public String getEstado() { return estado; }
     public void setEstado(String estado) { this.estado = estado; }
+
+    public Puesto[] getMyPuestos() { return myPuestos; }
 
     public int totalPasajesVendidos(List<PasajeTicket> tickets) {
         int count = 0;

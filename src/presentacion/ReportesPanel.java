@@ -29,12 +29,14 @@ public class ReportesPanel extends JPanel {
         tabs.addTab("Ventas por mes / rango", crearPanelVentasRango());
 
         tabs.addChangeListener(e -> {
-            if (tabs.getSelectedIndex() == 1) {
-                actualizarTotalesDia();
-            }
+            actualizarTotalesDia();
         });
 
         add(tabs, BorderLayout.CENTER);
+    }
+
+    public void refreshData() {
+        actualizarTotalesDia();
     }
 
     // ============================================================
@@ -149,11 +151,15 @@ public class ReportesPanel extends JPanel {
 
         panel.add(metricas, BorderLayout.CENTER);
 
+        JPanel tableWrapper = new JPanel(new BorderLayout());
+        tableWrapper.setOpaque(false);
+        tableWrapper.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
         JPanel tableContainer = new JPanel(new BorderLayout());
         tableContainer.setOpaque(false);
         tableContainer.add(new JScrollPane(table), BorderLayout.CENTER);
         tableContainer.add(exportarBtn, BorderLayout.SOUTH);
-        panel.add(tableContainer, BorderLayout.SOUTH);
+        tableWrapper.add(tableContainer, BorderLayout.CENTER);
+        panel.add(tableWrapper, BorderLayout.SOUTH);
 
         return panel;
     }
